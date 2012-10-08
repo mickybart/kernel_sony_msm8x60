@@ -124,6 +124,10 @@ obj-$(CONFIG_SIGNATURE) += digsig.o
 obj-$(CONFIG_CLZ_TAB) += clz_tab.o
 
 obj-$(CONFIG_RBTREE_TEST) += rbtree_test.o
+obj-$(CONFIG_PRIO_TREE_TEST) += prio_tree_test.o
+obj-$(CONFIG_INTERVAL_TREE_TEST) += interval_tree_test.o
+
+interval_tree_test-objs := interval_tree_test_main.o interval_tree.o
 
 hostprogs-y	:= gen_crc32table
 clean-files	:= crc32table.h
