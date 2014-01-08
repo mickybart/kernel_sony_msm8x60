@@ -2813,7 +2813,7 @@ static int mdp4_calc_req_mdp_clk(struct msm_fb_data_type *mfd,
 		       __func__);
 		return mdp_max_clk;
 	}
-	
+
 	xscale -= dst_w;
 	xscale <<= shift;
 	if (op_mode & MDP4_OP_FLIP_LR)
@@ -2822,17 +2822,13 @@ static int mdp4_calc_req_mdp_clk(struct msm_fb_data_type *mfd,
 	pr_debug("%s: the right %d shifted xscale is %d.\n",
 		 __func__, shift, xscale);
 
-	if (src_h > dst_h) {
-		yscale = src_h;
-		yscale <<= shift;
-		yscale /= dst_h;
-	} else {		/* upscale */
-		yscale = dst_h;
-		yscale <<= shift;
-		yscale /= src_h;
-	}
+	if (src_h > dst_h)
+	    yscale = src_h;
+	else
+	    yscale = dst_h;
 
-
+	yscale <<= shift;
+	yscale /= dst_h;
 	yscale *= src_w;
 	if (op_mode & MDP4_OP_FLIP_UD)
 	    yscale *= 2;
