@@ -71,10 +71,12 @@ void end_swap_bio_write(struct bio *bio, int err)
 		set_page_dirty(page);
 		if (printk_timed_ratelimit(&swap_error_rs_time,
 					   SWAP_ERROR_LOG_RATE_MS))
+#ifndef CONFIG_ZSWAP
 			printk(KERN_ALERT "Write-error on swap-device (%u:%u:%Lu)\n",
 				imajor(bio->bi_bdev->bd_inode),
 				iminor(bio->bi_bdev->bd_inode),
 				(unsigned long long)bio->bi_sector);
+#endif
 		ClearPageReclaim(page);
 	}
 	end_page_writeback(page);
