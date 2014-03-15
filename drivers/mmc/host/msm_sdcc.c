@@ -3,7 +3,7 @@
  *
  *  Copyright (C) 2007 Google Inc,
  *  Copyright (C) 2003 Deep Blue Solutions, Ltd, All Rights Reserved.
- *  Copyright (c) 2009-2012, The Linux Foundation. All rights reserved.
+ *  Copyright (c) 2009-2012, 2014, The Linux Foundation. All rights reserved.
  *  Copyright (C) 2012 Sony Mobile Communications AB.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -1874,9 +1874,10 @@ msmsdcc_irq(int irq, void *dev_id)
 				 */
 				wake_lock(&host->sdio_wlock);
 			} else {
-				if (!mmc->card || !mmc_card_sdio(mmc->card)) {
-					WARN(1, "%s: SDCC core interrupt received for non-SDIO cards when SDCC clocks are off\n",
-					     mmc_hostname(mmc));
+				if (!mmc->card || (mmc->card &&
+				    !mmc_card_sdio(mmc->card))) {
+					pr_warning("%s: SDCC core interrupt received for non-SDIO cards when SDCC clocks are off\n",
+					   mmc_hostname(mmc));
 					ret = 1;
 					break;
 				}
@@ -1908,9 +1909,10 @@ msmsdcc_irq(int irq, void *dev_id)
 #endif
 
 		if (status & MCI_SDIOINTROPE) {
-			if (!mmc->card || mmc_card_sdio(mmc->card)) {
-				WARN(1, "%s: SDIO interrupt received for non-SDIO card\n",
-					mmc_hostname(mmc));
+			if (!mmc->card || (mmc->card &&
+			    !mmc_card_sdio(mmc->card))) {
+				pr_warning("%s: SDIO interrupt (SDIOINTROPE) received for non-SDIO card\n",
+					   mmc_hostname(mmc));
 				ret = 1;
 				break;
 			}
