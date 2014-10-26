@@ -739,7 +739,7 @@ static struct mount *clone_mnt(struct mount *old, struct dentry *root,
 			mnt->mnt_group_id = old->mnt_group_id;
 
 		if ((flag & CL_MAKE_SHARED) && !mnt->mnt_group_id) {
-			int err = mnt_alloc_group_id(mnt);
+			err = mnt_alloc_group_id(mnt);
 			if (err)
 				goto out_free;
 		}
