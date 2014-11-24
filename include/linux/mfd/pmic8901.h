@@ -1,4 +1,5 @@
 /* Copyright (c) 2010-2011, The Linux Foundation. All rights reserved.
+  * Copyright (C) 2012 Sony Ericsson Mobile Communications AB
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -44,6 +45,7 @@ struct pm8901_platform_data {
 	struct pm8xxx_misc_platform_data	*misc_pdata;
 	struct pm8901_vreg_pdata		*regulator_pdatas;
 	int					num_regulators;
+	int					pm_dVdd_unstable;
 };
 
 #endif /* __PMIC8901_H__ */

@@ -1,4 +1,5 @@
 /* Copyright (c) 2010-2012, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2012 Sony Ericsson Mobile Communications AB
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -79,6 +80,28 @@ static int pm8901_write_buf(const struct device *dev, u16 addr, u8 *buf,
 	const struct pm8901_chip *pmic = pm8901_drvdata->pm_chip_data;
 
 	return msm_ssbi_write(pmic->dev->parent, addr, buf, cnt);
+}
+
+static int pm8901_preload_dVdd(const struct device *dev)
+{
+	int rc;
+	u8 reg;
+
+	reg = 0x0F;
+	rc = pm8901_writeb(dev, 0x0BD, reg);
+	if (rc)
+		pr_err("%s: pm8901_writeb failed for 0x0BD, rc=%d\n", __func__,
+			rc);
+
+	reg = 0xB4;
+	rc = pm8901_writeb(dev, 0x001, reg);
+	if (rc)
+		pr_err("%s: pm8901_writeb failed for 0x001, rc=%d\n", __func__,
+			rc);
+
+	pr_info("%s: dVdd preloaded\n", __func__);
+
+	return rc;
 }
 
 static int pm8901_read_irq_stat(const struct device *dev, int irq)
@@ -325,6 +348,9 @@ static int __devinit pm8901_probe(struct platform_device *pdev)
 		pr_err("Cannot add subdevices rc=%d\n", rc);
 		goto err;
 	}
+
+	if (pdata->pm_dVdd_unstable)
+		pm8901_preload_dVdd(pmic->dev);
 
 	return 0;
 
