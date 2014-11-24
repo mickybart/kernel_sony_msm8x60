@@ -35,4 +35,10 @@ struct pm8xxx_pwrkey_platform_data  {
 	u32  wakeup;
 };
 
+#ifdef CONFIG_PMIC8XXX_FORCECRASH
+extern int pmic8xxx_forcecrash_init(struct platform_device *);
+extern void pmic8xxx_forcecrash_exit(struct platform_device *);
+extern void pmic8xxx_forcecrash_timer_setup(bool);
+#endif
+
 #endif /* __PMIC8XXX_PWRKEY_H__ */
