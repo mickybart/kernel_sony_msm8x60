@@ -1,0 +1,90 @@
+config MSM_CAMERA_V4L2
+        bool "MSM Camera V4L2 Interface"
+        depends on MSM_CAMERA
+        default n
+        ---help---
+          This flag enables V4L2 interface of MSM
+          camera driver. If enabled, application interacts
+          with /dev/video0 through V4L2 APIs. Otherwise,
+          native APIs are used through /dev/config0, /dev/frame0,
+          and /dev/control0.
+
+comment "Camera Sensor Selection"
+config MSM_CAMERA_FLASH
+	bool "Qualcomm MSM camera flash support"
+	depends on MSM_CAMERA
+	default y
+	---help---
+	  Enable support for LED flash for msm camera
+
+config MSM_CAMERA_SENSOR
+	bool "Qualcomm MSM camera sensor support"
+	depends on MSM_CAMERA
+
+config MSM_ACTUATOR
+	bool "Qualcomm MSM actuator support"
+	depends on MSM_CAMERA
+
+config MSM_EEPROM
+	bool "Qualcomm MSM EEPROM support"
+	depends on MSM_CAMERA
+
+config MSM_GEMINI
+	tristate "Qualcomm MSM Gemini Jpeg Engine support"
+	depends on MSM_CAMERA && (ARCH_MSM7X30 || ARCH_MSM8X60 || ARCH_MSM8960)
+	default n
+	---help---
+	  Enable support for Gemini Jpeg Engine
+
+config MSM_VPE
+	tristate "Qualcomm MSM Video Pre-processing Engine support"
+	depends on MSM_CAMERA && (ARCH_MSM7X30 || ARCH_MSM8X60)
+	default y
+	---help---
+	  Enable support for Video Pre-processing Engine
+
+config QUP_EXCLUSIVE_TO_CAMERA
+	bool "QUP exclusive to camera"
+	depends on MSM_CAMERA
+	default y
+	---help---
+	  This flag enabled states that QUP
+	  is exclusive to camera. In case this
+	  is disabled, the lvs1 voltage is enabled
+	  by QUP in the board file as QUP is used by
+	  applications other than camera.
+
+config MSM_V4L2_VIDEO_OVERLAY_DEVICE
+	tristate "Qualcomm MSM V4l2 video overlay device"
+	---help---
+	  Enables support for the MSM V4L2 video
+	  overlay driver. This allows video rendering
+	  apps to render overlaid video using Video4Linux2
+	  APIs, by using /dev/videoX device
+
+config OV7692
+	bool "Sensor OV7692 (VGA YUV)"
+	depends on MSM_CAMERA
+	---help---
+	  Omni Vision VGA YUV Sensor
+
+config SONY_CAM_MAIN_V4L2
+	bool "SONY specific camera (Main camera)"
+	depends on MSM_CAMERA && ARCH_MSM8X60 && MSM_CAMERA_V4L2
+	default n
+	---help---
+	  SONY specific camera module for main camera
+
+config SONY_CAM_SUB_V4L2
+	bool "SONY specific camera (Sub camera)"
+	depends on MSM_CAMERA && ARCH_MSM8X60 && MSM_CAMERA_V4L2
+	default n
+	---help---
+	  SONY specific camera module for sub camera
+
+config SEMC_VPE
+	tristate "Qualcomm MSM Video Pre-processing Engine support"
+	depends on MSM_CAMERA && ARCH_MSM8X60
+	default n
+	---help---
+	  Enable support for Video Pre-processing Engine
