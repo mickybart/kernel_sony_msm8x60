@@ -788,6 +788,40 @@ config MACH_MSM8X60_DRAGON
 	help
 	  Support for the Qualcomm MSM8x60 Dragon board.
 
+config MACH_SEMC_FUJI
+	depends on ARCH_MSM8X60
+	default n
+	bool "SEMC Fuji platform"
+	help
+	  Support for the Sony Ericsson Fuji platform.
+
+choice
+	prompt "SEMC Fuji device"
+	depends on MACH_SEMC_FUJI
+	default MACH_SEMC_NOZOMI
+
+config MACH_SEMC_NOZOMI
+	bool "SEMC Nozomi"
+	help
+	  Support for the Sony Ericsson Nozomi device.
+
+config MACH_SEMC_NOZOMI2
+	bool "SEMC Nozomi2"
+	help
+	  Support for the Sony Ericsson Nozomi2 device.
+
+config MACH_SEMC_HIKARI_ROW
+	bool "SEMC Hikari_row"
+	help
+	  Support for the Sony Ericsson Hikari_row device.
+
+config MACH_SEMC_AOBA
+	bool "SEMC Aoba"
+	help
+	  Support for the Sony Ericsson Aoba device.
+
+endchoice
+
 config MACH_MSM8960_CDP
 	depends on ARCH_MSM8960
 	bool "MSM8960 CDP"
