@@ -78,3 +78,4 @@ obj-$(CONFIG_NFC_PN544)		+= pn544.o
 obj-$(CONFIG_TZCOM)		+= tzcom.o
 obj-$(CONFIG_SEMC_FELICA_SUPPORT) += felica.o
 obj-$(CONFIG_SEMC_ONESEG_TUNER_PM) += oneseg_tunerpm.o
+obj-$(CONFIG_SENSORS_MPU3050)	+= mpu3050/
