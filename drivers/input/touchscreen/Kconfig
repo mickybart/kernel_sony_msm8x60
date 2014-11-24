@@ -977,5 +977,26 @@ config TOUCHSCREEN_CHARGER_NOTIFY
 	  The touch firmware will use this information to decide whether
 	  a new algorithm to reduce the noise impact needs to be applied
 	  or not.
+
+config TOUCHSCREEN_CLEARPAD
+        tristate "Synaptics ClearPad"
+	default n
+        help
+          Say Y here to enable Synaptics ClearPad touchscreen.
+
+config TOUCHSCREEN_CLEARPAD_I2C
+        tristate "Synaptics ClearPad I2C"
+	depends on I2C && TOUCHSCREEN_CLEARPAD
+	default n
+        help
+          Say Y here to enable Synaptics ClearPad I2C touchscreen.
+
+config TOUCHSCREEN_CLEARPAD_RMI_DEV
+        tristate "Synaptics ClearPad RMI Dev"
+	depends on GPIO_SYSFS && TOUCHSCREEN_CLEARPAD && TOUCHSCREEN_CLEARPAD_I2C
+	default n
+        help
+          Say Y here to enable Synaptics ClearPad RMI dev.
+
 endif
 
