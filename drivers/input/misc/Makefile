@@ -66,3 +66,4 @@ obj-$(CONFIG_BMP18X_I2C)		+= bmp18x-i2c.o
 obj-$(CONFIG_INPUT_BMA250)              += bma250.o
 obj-$(CONFIG_INPUT_BMA250_NG)		+= bma250_ng.o
 obj-$(CONFIG_INPUT_AKM8972)             += akm8972.o
+obj-$(CONFIG_INPUT_APDS9702)            += apds9702.o
