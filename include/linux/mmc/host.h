@@ -481,4 +481,9 @@ static inline unsigned int mmc_host_clk_rate(struct mmc_host *host)
 	return host->ios.clock;
 }
 #endif
+
+#ifdef CONFIG_MACH_SDCC_BCM_DRIVER
+extern void mmc_pm_keeppwr_control(struct mmc_host *mmc, int pwr);
+#endif
+
 #endif /* LINUX_MMC_HOST_H */

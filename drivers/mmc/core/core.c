@@ -5,6 +5,7 @@
  *  SD support Copyright (C) 2004 Ian Molton, All Rights Reserved.
  *  Copyright (C) 2005-2008 Pierre Ossman, All Rights Reserved.
  *  MMCv4 support Copyright (C) 2006 Philip Langdale, All Rights Reserved.
+ *  Copyright (C) 2012 Sony Mobile Communications AB.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -2683,8 +2684,17 @@ int mmc_suspend_host(struct mmc_host *host)
 	}
 	mmc_bus_put(host);
 
+#ifndef CONFIG_MACH_SDCC_BCM_DRIVER
 	if (!err && !mmc_card_keep_power(host))
 		mmc_power_off(host);
+#else
+	if (!err) {
+		if (!mmc_card_keep_power(host))
+			mmc_power_off(host);
+		else
+			mmc_pm_keeppwr_control(host, 0);
+	}
+#endif
 
 	return err;
 stop_bkops_err:
@@ -2727,6 +2737,10 @@ int mmc_resume_host(struct mmc_host *host)
 				pm_runtime_enable(&host->card->dev);
 			}
 		}
+#ifdef CONFIG_MACH_SDCC_BCM_DRIVER
+		else
+			mmc_pm_keeppwr_control(host, 1);
+#endif
 		BUG_ON(!host->bus_ops->resume);
 		err = host->bus_ops->resume(host);
 		if (err) {
