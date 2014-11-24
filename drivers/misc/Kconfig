@@ -697,6 +697,12 @@ config TZCOM
 	  TrustZone Operating Environment (TZBSP) using Secure Channel
 	  Manager (SCM) interface.
 
+config SEMC_FELICA_SUPPORT
+	bool "Enable FeliCa support"
+	default n
+	help
+	  This option enables support for FeliCa.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
