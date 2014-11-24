@@ -454,4 +454,17 @@ config BATTERY_TEMP_CONTROL
 	  Say Y to enable battery temperature control for safty.
 	  It controls charging current depending on battery temperature.
 
+config BATTERY_BQ27520_SEMC
+	tristate "SEMC BQ27520 battery driver"
+	depends on I2C
+	default n
+	help
+	  Say Y here to enable support for batteries with BQ27520 (I2C) chips.
+
+config BATTERY_BQ27520_SEAL_FW
+	tristate "Seal the frimware of BQ27520"
+	depends on BATTERY_BQ27520_SEMC
+	help
+	  Say Y to seal the firmware of fuel gauge
+
 endif # POWER_SUPPLY
