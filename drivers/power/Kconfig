@@ -475,4 +475,12 @@ config CHARGER_BQ24185
 	  Say Y here to enable Support for the TI BQ24185 Battery Charger.
 	  The driver is configured to operate with a single lithium cell.
 
+config CHARGER_BQ24160
+	tristate "TI BQ24160 Dual-Input, Single Cell Switch-Mode Li-Ion charger"
+	depends on I2C
+	default n
+	help
+	  Say Y here to enable Support for the TI BQ24160 Battery Charger.
+	  The driver is configured to operate with a single lithium cell.
+
 endif # POWER_SUPPLY

@@ -62,3 +62,4 @@ obj-$(CONFIG_BQ51051B_CHARGER)	+= bq51051b_charger.o
 obj-$(CONFIG_BATTERY_TEMP_CONTROL) += battery_temp_ctrl.o
 obj-$(CONFIG_BATTERY_BQ27520_SEMC) += bq27520_battery.o
 obj-$(CONFIG_CHARGER_BQ24185)	+= bq24185_charger.o
+obj-$(CONFIG_CHARGER_BQ24160)	+= bq24160_charger.o
