@@ -692,4 +692,12 @@ config INPUT_BMA250_NG
 	  This device driver supprot to get accelerometer data from
 	  other parent device's register.
 
+config INPUT_AKM8972
+	tristate "AKM8972 Compass Driver"
+	default n
+	depends on I2C
+	help
+	  Say Y here if you want support for the AKM8972 Compass Driver
+	  implemented by SEMC.
+
 endif
