@@ -2466,6 +2466,13 @@ config PMIC8058_MIC_BIAS
 	  Provides support for activate pm8058 mic bias driver used for
 	  primary and secondary mic.
 
+config FUJI_PMIC_KEYPAD
+	bool "Fuji PMIC Keypad"
+	depends on ARCH_MSM8X60
+	default n
+	help
+	  This enables Fuji PMIC Keypad support.
+
 config SONY_SSM
         bool "Support Super Stamina Mode"
         default n
