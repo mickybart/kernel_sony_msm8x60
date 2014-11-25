@@ -2459,6 +2459,13 @@ config MSM_8X60_FUSION_GPIO_GLITCH
 	  Enable masking of glitch during boot up, which helps in avoiding unwanted
 	  noise or s/w code from toggling the ap2mdm err fatal.
 
+config SONY_SSM
+        bool "Support Super Stamina Mode"
+        default n
+        help
+          This enables support for power mode notifications, required by Super
+          Stamina Mode.
+
 config MSM_OCMEM
 	bool "MSM On-Chip memory driver (OCMEM)"
 	help
