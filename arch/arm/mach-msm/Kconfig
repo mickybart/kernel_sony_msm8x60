@@ -2155,6 +2155,20 @@ config MSM_PM8X60
 	depends on PM
 	bool
 
+config MSM_PC_DEBUG_COUNTERS
+	depends on PM
+	bool
+	help
+		This option enables warmboot entry/exit counters for each core on a
+		non-cacheable always on IMEM memory. This is a useful feature during
+		debug to understand if the system has correctly warmbooted after a
+		power collapse. The debug counters start at a memory offset of 0x664
+		on the IMEM. Each core reserves 4 words for events, of which 3 are 
+		being used to monitor the following events,
+		1) power collapse entry
+		2) warmboot exit
+		3) failed power collapse when wfi returns with a pending interrupt.
+
 config MSM_EVENT_TIMER
 	bool "Event timer"
 	help

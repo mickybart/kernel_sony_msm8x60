@@ -138,6 +138,10 @@ static inline void msm_pm_add_stat(enum msm_pm_time_stats_id id, int64_t t) {}
 #endif
 
 void msm_pm_set_cpr_ops(struct msm_pm_cpr_ops *ops);
+
+#ifdef CONFIG_MSM_PC_DEBUG_COUNTERS
 extern void *msm_pc_debug_counters;
 extern unsigned long msm_pc_debug_counters_phys;
+#endif
+
 #endif  /* __ARCH_ARM_MACH_MSM_PM_H */

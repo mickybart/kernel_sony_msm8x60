@@ -1068,6 +1068,7 @@ void __init msm_pm_set_tz_retention_flag(unsigned int flag)
 	msm_pm_retention_tz_call = flag;
 }
 
+#ifdef CONFIG_MSM_PC_DEBUG_COUNTERS
 static int __devinit msm_pc_debug_probe(struct platform_device *pdev)
 {
 	struct resource *res = NULL;
@@ -1107,6 +1108,7 @@ static struct platform_driver msm_pc_counter_driver = {
 		.of_match_table = msm_pc_debug_table,
 	},
 };
+#endif
 
 static int __init msm_pm_init(void)
 {
@@ -1167,7 +1169,9 @@ static int __init msm_pm_init(void)
 	msm_pm_target_init();
 	hrtimer_init(&pm_hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_ABS);
 	msm_cpuidle_init();
+#ifdef CONFIG_MSM_PC_DEBUG_COUNTERS
 	platform_driver_register(&msm_pc_counter_driver);
+#endif
 
 	return 0;
 }

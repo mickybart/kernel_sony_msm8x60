@@ -114,6 +114,8 @@ ENTRY(msm_pm_collapse)
 	bne	skip
 	bl	v7_flush_dcache_all
 skip:
+
+#if defined(CONFIG_MSM_PC_DEBUG_COUNTERS)
 	mrc	p15, 0, r0, c0, c0, 5	/* MPIDR */
 	and	r0, r0, #15		/* what CPU am I */
 
@@ -126,6 +128,7 @@ skip:
 	add	r2, #1
 	str	r2, [r1]
 skip_pc_debug1:
+#endif
 
 #ifdef CONFIG_ARCH_MSM_KRAIT
 	ldr	r0, =SCM_SVC_BOOT
@@ -154,6 +157,8 @@ skip_pc_debug1:
 #if defined(CONFIG_MSM_FIQ_SUPPORT)
 	cpsie   f
 #endif
+
+#if defined(CONFIG_MSM_PC_DEBUG_COUNTERS)
 	mrc	p15, 0, r0, c0, c0, 5 /* MPIDR */
 	and	r0, r0, #15              /* what CPU am I                  */
 
@@ -168,6 +173,7 @@ skip_pc_debug1:
 	str	r2, [r1]
 
 skip_pc_debug2:
+#endif
 
 #if defined(CONFIG_MSM_JTAG) || defined(CONFIG_MSM_JTAG_MM)
 	bl	msm_jtag_restore_state
@@ -282,6 +288,7 @@ ENTRY(msm_pm_boot_entry)
 	mrc     p15, 0, r0, c0, c0, 5    /* MPIDR                          */
 	and     r0, r0, #15              /* what CPU am I                  */
 
+#if defined(CONFIG_MSM_PC_DEBUG_COUNTERS)
 	ldr	r1, =msm_pc_debug_counters_phys /*phys addr for IMEM reg */
 	ldr	r2, =msm_pm_boot_entry
 	adr	r3, msm_pm_boot_entry
@@ -298,6 +305,8 @@ ENTRY(msm_pm_boot_entry)
 	str	r2, [r1]
 
 skip_pc_debug3:
+#endif
+
 	ldr     r1, =msm_pm_boot_vector
 	ldr     r2, =msm_pm_boot_entry
 	adr     r3, msm_pm_boot_entry
@@ -347,6 +356,7 @@ apps_power_collapse:
 l2x0_base_addr:
 	.long 0x0
 
+#if defined(CONFIG_MSM_PC_DEBUG_COUNTERS)
 	.globl msm_pc_debug_counters_phys
 msm_pc_debug_counters_phys:
 	.long 0x0
@@ -354,6 +364,7 @@ msm_pc_debug_counters_phys:
 	.globl msm_pc_debug_counters
 msm_pc_debug_counters:
 	.long 0x0
+#endif
 
 /*
  * Default the l2 flush flag to 1 so that caches are flushed during power
