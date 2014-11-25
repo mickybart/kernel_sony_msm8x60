@@ -226,7 +226,11 @@ ifdef CONFIG_CPU_IDLE
 endif
 
 ifdef CONFIG_MSM_CAMERA_V4L2
+ifdef CONFIG_MACH_SEMC_FUJI
+	obj-$(CONFIG_MACH_SEMC_FUJI) += board-fuji-camera.o
+else
 	obj-$(CONFIG_ARCH_MSM8X60) += board-msm8x60-camera.o
+endif
 endif
 obj-$(CONFIG_ARCH_FSM9XXX) += devices-fsm9xxx.o
 obj-$(CONFIG_ARCH_FSM9XXX) += clock-fsm9xxx.o clock-local.o acpuclock-fsm9xxx.o
@@ -287,6 +291,19 @@ obj-$(CONFIG_MACH_MSM8930_CDP) += board-8930-all.o board-8930-regulator-pm8038.o
 obj-$(CONFIG_MACH_MSM8930_MTP) += board-8930-all.o board-8930-regulator-pm8038.o board-8930-regulator-pm8917.o
 obj-$(CONFIG_MACH_MSM8930_FLUID) += board-8930-all.o board-8930-regulator-pm8038.o board-8930-regulator-pm8917.o
 obj-$(CONFIG_PM8921_BMS) += bms-batterydata.o bms-batterydata-desay.o
+
+obj-$(CONFIG_MACH_SEMC_NOZOMI) += board-semc_fuji.o gpiomux-fuji_nozomi.o leds-fuji_nozomi.o charger-fuji_nozomi.o keypad-fuji_nozomi.o vreg-fuji_nozomi.o board-semc_fuji-rfkill.o nfc-fuji_nozomi.o gyro-semc_common.o gyro-semc_fuji_nozomi.o
+obj-$(CONFIG_MACH_SEMC_NOZOMI2) += board-semc_fuji.o gpiomux-fuji_nozomi.o leds-fuji_nozomi.o charger-fuji_nozomi.o keypad-fuji_nozomi.o vreg-fuji_nozomi.o board-semc_fuji-rfkill.o nfc-fuji_nozomi.o gyro-semc_common.o gyro-semc_fuji_nozomi.o
+obj-$(CONFIG_MACH_SEMC_HIKARI_ROW) += board-semc_fuji.o gpiomux-fuji_hikari_row.o leds-fuji_hikari.o charger-fuji_hikari.o keypad-fuji_hikari.o vreg-fuji_hikari_row.o board-semc_fuji-rfkill.o nfc-fuji.o gyro-semc_common.o gyro-semc_fuji_hikari.o
+obj-$(CONFIG_MACH_SEMC_AOBA) += board-semc_fuji.o gpiomux-fuji_csfb_aoba.o leds-fuji_csfb_aoba.o charger-fuji_csfb_aoba.o keypad-fuji_csfb_aoba.o vreg-fuji_csfb_aoba.o mdm.o board-semc_fuji-rfkill.o nfc-fuji.o gyro-semc_common.o gyro-semc_fuji_csfb_aoba.o
+
+ifdef CONFIG_TOUCHSCREEN_CLEARPAD
+	obj-$(CONFIG_MACH_SEMC_NOZOMI) += touch-fuji_nozomi.o
+	obj-$(CONFIG_MACH_SEMC_NOZOMI2) += touch-fuji_nozomi.o
+	obj-$(CONFIG_MACH_SEMC_HIKARI_ROW) += touch-fuji_hikari.o
+	obj-$(CONFIG_MACH_SEMC_AOBA) += touch-fuji_csfb_aoba.o
+endif
+
 obj-$(CONFIG_MACH_APQ8064_CDP) += board-8064-all.o board-8064-regulator.o
 obj-$(CONFIG_MACH_APQ8064_MTP) += board-8064-all.o board-8064-regulator.o
 obj-$(CONFIG_MACH_APQ8064_LIQUID) += board-8064-all.o board-8064-regulator.o

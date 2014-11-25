@@ -2501,6 +2501,13 @@ config SEMC_CHARGER_CRADLE_ARCH
        help
 	  This enables cradle for charging.
 
+config FUJI_GPIO_KEYPAD
+	bool "Enable Fuji gpio keypad support"
+	depends on MACH_SEMC_FUJI
+	default n
+	help
+	  This enables the Fuji gpio keypad support.
+
 config SONY_SSM
         bool "Support Super Stamina Mode"
         default n
