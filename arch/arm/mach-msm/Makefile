@@ -382,6 +382,7 @@ obj-$(CONFIG_ARCH_MSM8960) += mdm2.o mdm_common.o
 
 obj-$(CONFIG_SEMC_CHARGER_USB_ARCH) += semc_charger_usb.o
 obj-$(CONFIG_SEMC_CHARGER_CRADLE_ARCH) += semc_charger_cradle.o
+obj-$(CONFIG_BATTERY_SEMC_ARCH) += semc_battery_data.o
 obj-$(CONFIG_FUJI_PMIC_KEYPAD) += keypad-pmic-fuji.o
 
 obj-$(CONFIG_MSM_RTB) += msm_rtb.o
