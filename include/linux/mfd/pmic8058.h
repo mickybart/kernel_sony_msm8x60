@@ -155,6 +155,9 @@ struct pm8058_platform_data {
 #ifdef CONFIG_PMIC8058_MIC_BIAS
 	struct pm8058_mic_bias_platform_data   *mic_bias_pdata;
 #endif
+#ifdef CONFIG_SIMPLE_REMOTE_PLATFORM
+	struct simple_remote_platform_data	*simple_remote_pdata;
+#endif
 };
 
 #endif  /* __MFD_PMIC8058_H__ */

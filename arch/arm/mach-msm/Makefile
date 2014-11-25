@@ -51,6 +51,7 @@ endif
 obj-$(CONFIG_HOTPLUG_CPU) += hotplug.o
 
 ifdef CONFIG_ARCH_MSM8X60
+	obj-$(CONFIG_SIMPLE_REMOTE_PLATFORM) += simple_remote_msm8x60_pf.o
 	obj-$(CONFIG_PMIC8058_MIC_BIAS) += pm8058-mic_bias.o
 endif
 obj-$(CONFIG_MSM_AVS_HW) += avs.o

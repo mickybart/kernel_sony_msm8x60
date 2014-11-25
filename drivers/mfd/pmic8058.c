@@ -28,6 +28,9 @@
 #ifdef CONFIG_PMIC8058_MIC_BIAS
 #include <mach/pm8058-mic_bias.h>
 #endif
+#ifdef CONFIG_SIMPLE_REMOTE_PLATFORM
+#include <mach/simple_remote_msm8x60_pf.h>
+#endif
 
 #define REG_MPP_BASE			0x50
 #define REG_IRQ_BASE			0x1BB
@@ -421,6 +424,19 @@ static struct mfd_cell mic_bias_cell __devinitdata = {
 };
 #endif
 
+#ifdef CONFIG_SIMPLE_REMOTE_PLATFORM
+static const struct resource resources_simple_remote[] __devinitconst = {
+	SINGLE_IRQ_RESOURCE(NULL, PM8058_SW_1_IRQ),
+};
+
+static struct mfd_cell simple_remote_cell __devinitdata = {
+	.name = SIMPLE_REMOTE_PF_NAME,
+	.id = -1,
+	.num_resources = ARRAY_SIZE(resources_simple_remote),
+	.resources = resources_simple_remote,
+};
+#endif
+
 static int __devinit
 pm8058_add_subdevices(const struct pm8058_platform_data *pdata,
 				struct pm8058_chip *pmic)
@@ -723,6 +739,21 @@ pm8058_add_subdevices(const struct pm8058_platform_data *pdata,
 		rc = mfd_add_devices(pmic->dev, 0, &mic_bias_cell, 1, NULL, 0);
 		if (rc) {
 			pr_err("Failed to add mic bias subdevice ret=%d\n", rc);
+			goto bail;
+		}
+	}
+#endif
+
+#ifdef CONFIG_SIMPLE_REMOTE_PLATFORM
+	if (pdata->simple_remote_pdata) {
+		simple_remote_cell.platform_data = pdata->simple_remote_pdata;
+		simple_remote_cell.pdata_size =
+				sizeof(struct simple_remote_platform_data);
+		rc = mfd_add_devices(pmic->dev, 0, &simple_remote_cell, 1,
+					NULL, irq_base);
+		if (rc) {
+			pr_err("Failed to add simple remote subdevice"
+			       " ret=%d\n", rc);
 			goto bail;
 		}
 	}
