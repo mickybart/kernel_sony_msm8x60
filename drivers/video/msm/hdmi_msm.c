@@ -140,6 +140,36 @@ static boolean msg_recv_complete = TRUE;
 #define HDMI_MSM_CEC_WR_DATA_DATA(___d)		(((___d)&0xFF) << 8)
 
 
+#ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL_CEC_USES_UEVENT
+static int hdmi_notify_cec_recv(struct hdmi_msm_cec_msg *msg)
+{
+	char *envp[2];
+	ssize_t ret = 0;
+	int i;
+
+	envp[0] = kmalloc(128, GFP_KERNEL);
+
+	ret = snprintf(envp[0], 128, "CEC=%02x%02x%02x",
+		(((msg->sender_id << 4) & 0xf0) | (msg->recvr_id & 0x0f)),
+		msg->opcode,
+		msg->frame_size-2);
+
+	for (i = 0; i < msg->frame_size-2; i++)
+		ret += snprintf(envp[0]+ret, 128-ret, "%02x", msg->operand[i]);
+
+	envp[1] = NULL;
+
+	DEV_INFO("env[0] : %s", envp[0]);
+
+	kobject_uevent_env(external_common_state->uevent_kobj,
+		KOBJ_CHANGE, envp);
+
+	kfree(envp[0]);
+
+	return 0;
+}
+#endif
+
 void hdmi_msm_cec_init(void)
 {
 	/* 0x02A8 CEC_REFTIMER */
@@ -404,6 +434,10 @@ void hdmi_msm_cec_msg_recv(void)
 	hdmi_msm_dump_cec_msg(hdmi_msm_state->cec_queue_wr);
 	DEV_DBG("=======================================\n");
 
+#ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL_CEC_USES_UEVENT
+	hdmi_notify_cec_recv(hdmi_msm_state->cec_queue_wr);
+#endif
+
 #ifdef DRVR_ONLY_CECT_NO_DAEMON
 	switch (hdmi_msm_state->cec_queue_wr->opcode) {
 	case 0x64:
@@ -582,8 +616,10 @@ void hdmi_msm_cec_msg_recv(void)
 	hdmi_msm_state->cec_queue_wr++;
 	if (hdmi_msm_state->cec_queue_wr == CEC_QUEUE_END)
 		hdmi_msm_state->cec_queue_wr = hdmi_msm_state->cec_queue_start;
+#ifndef CONFIG_FB_MSM_HDMI_MSM_PANEL_CEC_USES_UEVENT
 	if (hdmi_msm_state->cec_queue_wr == hdmi_msm_state->cec_queue_rd)
 		hdmi_msm_state->cec_queue_full = true;
+#endif
 	mutex_unlock(&hdmi_msm_state_mutex);
 	DEV_DBG("Exiting %s()\n", __func__);
 }
