@@ -3834,7 +3834,11 @@ static void __init msm8660_clock_pre_init(void)
 	 * gating for all clocks. Also set VFE_AHB's FORCE_CORE_ON bit to
 	 * prevent its memory from being collapsed when the clock is halted.
 	 * The sleep and wake-up delays are set to safe values. */
+#ifdef CONFIG_MACH_SEMC_FUJI
+	rmwreg(0x00000003, AHB_EN_REG,  0x6C040203);
+#else
 	rmwreg(0x00000003, AHB_EN_REG,  0x6C000003);
+#endif
 	writel_relaxed(0x000007F9, AHB_EN2_REG);
 
 	/* Deassert all locally-owned MM AHB resets. */
