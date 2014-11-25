@@ -27,6 +27,13 @@ config FB_MSM_LOGO
 	---help---
 	  Show /initlogo.rle during boot.
 
+config FB_MSM_SONY_LOGO
+	bool "Sony Frame Buffer Logo"
+	depends on MACH_SEMC_FUJI
+	default y
+	---help---
+	  Show /logo.rle during boot.
+
 config FB_MSM_LCDC_HW
 	bool
 	default n
