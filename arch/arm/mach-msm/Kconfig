@@ -2418,6 +2418,12 @@ config MSM_MULTIMEDIA_USE_ION
 	  instead of pmem. Selecting this may also involve userspace
 	  dependencies as well.
 
+config MSM_8X60_FUSION_GPIO_GLITCH
+	tristate "Mask unexpected glitch during boot up"
+	help
+	  Enable masking of glitch during boot up, which helps in avoiding unwanted
+	  noise or s/w code from toggling the ap2mdm err fatal.
+
 config MSM_OCMEM
 	bool "MSM On-Chip memory driver (OCMEM)"
 	help
