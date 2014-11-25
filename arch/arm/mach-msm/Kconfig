@@ -2271,6 +2271,27 @@ config MSM_STANDALONE_POWER_COLLAPSE
        bool "Enable standalone power collapse"
        default n
 
+config MSM_GSBI5_UART
+	bool "Enable GSBI5 UART device"
+	depends on ARCH_MSM8X60
+	default n
+	help
+	  This enables GSBI5 configured into UART.
+
+config MSM_GSBI7_UART
+	bool "Enable GSBI7 UART device"
+	depends on ARCH_MSM8X60
+	default n
+	help
+	  This enables GSBI7 configured into UART.
+
+config MSM_GSBI5_I2C
+	bool "Enable GSBI5 I2C device"
+	depends on ARCH_MSM8X60
+	default n
+	help
+	  This enables GSBI5 configured into I2C.
+
 config MSM_GSBI9_UART
 	bool "Enable GSBI9 UART device"
 	default n
