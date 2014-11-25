@@ -209,6 +209,10 @@ static long charm_modem_ioctl(struct file *filp, unsigned int cmd,
 			put_user(boot_type, (unsigned long __user *) arg);
 		INIT_COMPLETION(charm_needs_reload);
 		break;
+	case POWROFF_CHARM:
+		CHARM_DBG("%s: bootup failed,reset modem directly\n", __func__);
+		charm_subsys_shutdown();
+		break;
 	default:
 		pr_err("%s: invalid ioctl cmd = %d\n", __func__, _IOC_NR(cmd));
 		ret = -EINVAL;

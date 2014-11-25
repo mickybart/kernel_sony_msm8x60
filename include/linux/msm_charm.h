@@ -13,6 +13,7 @@
 #define GET_DLOAD_STATUS	_IOR(CHARM_CODE, 8, int)
 #define IMAGE_UPGRADE		_IOW(CHARM_CODE, 9, int)
 #define SHUTDOWN_CHARM		_IOW(CHARM_CODE, 10, int)
+#define POWROFF_CHARM		_IO(CHARM_CODE, 9)
 
 enum charm_boot_type {
 	CHARM_NORMAL_BOOT = 0,
