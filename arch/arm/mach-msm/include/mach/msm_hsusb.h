@@ -94,7 +94,11 @@ enum chg_type {
 	USB_CHG_TYPE__SDP,
 	USB_CHG_TYPE__CARKIT,
 	USB_CHG_TYPE__WALLCHARGER,
-	USB_CHG_TYPE__INVALID
+	USB_CHG_TYPE__INVALID,
+#ifdef CONFIG_SUPPORT_ALIEN_USB_CHARGER
+	USB_CHG_TYPE__MIGHT_BE_HOST_PC,
+	USB_CHG_TYPE__ALIENCHARGER,
+#endif /*  CONFIG_SUPPORT_ALIEN_USB_CHARGER */
 };
 
 enum pre_emphasis_level {
@@ -138,6 +142,7 @@ struct msm_hsusb_gadget_platform_data {
 
 	int self_powered;
 	int is_phy_status_timer_on;
+	bool prop_chg;
 };
 
 struct msm_otg_platform_data {
@@ -189,8 +194,11 @@ struct msm_otg_platform_data {
 	int  (*chg_init)(int init);
 	int (*config_vddcx)(int high);
 	int (*init_vddcx)(int init);
+	int (*chg_is_initialized)(void);
+	int (*is_cradle_connected)(void);
 
 	struct pm_qos_request pm_qos_req_dma;
+	unsigned chg_drawable_ida;
 };
 
 struct msm_usb_host_platform_data {
