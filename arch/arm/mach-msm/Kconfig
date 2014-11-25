@@ -2459,6 +2459,13 @@ config MSM_8X60_FUSION_GPIO_GLITCH
 	  Enable masking of glitch during boot up, which helps in avoiding unwanted
 	  noise or s/w code from toggling the ap2mdm err fatal.
 
+config PMIC8058_MIC_BIAS
+	bool "pmic8058 mic bias driver"
+	default n
+	help
+	  Provides support for activate pm8058 mic bias driver used for
+	  primary and secondary mic.
+
 config SONY_SSM
         bool "Support Super Stamina Mode"
         default n

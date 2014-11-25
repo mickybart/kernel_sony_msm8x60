@@ -1,4 +1,5 @@
 /* Copyright (c) 2009-2011, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2012 Sony Ericsson Mobile Communications AB
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -128,6 +129,9 @@ struct pm8058_platform_data {
 	struct pm8058_xo_pdata			*xo_buffer_pdata;
 	int					num_xo_buffers;
 	struct pmic8058_charger_data		*charger_pdata;
+#ifdef CONFIG_PMIC8058_MIC_BIAS
+	struct pm8058_mic_bias_platform_data   *mic_bias_pdata;
+#endif
 };
 
 #endif  /* __MFD_PMIC8058_H__ */

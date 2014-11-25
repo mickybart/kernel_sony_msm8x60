@@ -1,4 +1,5 @@
 /* Copyright (c) 2009-2011, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2012 Sony Ericsson Mobile Communications AB
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -24,6 +25,9 @@
 #include <linux/mfd/pm8xxx/core.h>
 #include <linux/msm_adc.h>
 #include <linux/module.h>
+#ifdef CONFIG_PMIC8058_MIC_BIAS
+#include <mach/pm8058-mic_bias.h>
+#endif
 
 #define REG_MPP_BASE			0x50
 #define REG_IRQ_BASE			0x1BB
@@ -403,6 +407,13 @@ static struct mfd_cell gpio_cell __devinitdata = {
 	.num_resources	= ARRAY_SIZE(gpio_cell_resources),
 };
 
+#ifdef CONFIG_PMIC8058_MIC_BIAS
+static struct mfd_cell mic_bias_cell __devinitdata = {
+	.name = PM8058_MIC_BIAS_NAME,
+	.id = -1,
+};
+#endif
+
 static int __devinit
 pm8058_add_subdevices(const struct pm8058_platform_data *pdata,
 				struct pm8058_chip *pmic)
@@ -681,6 +692,19 @@ pm8058_add_subdevices(const struct pm8058_platform_data *pdata,
 		pr_err("Failed to add debugfs subdevice ret=%d\n", rc);
 		goto bail;
 	}
+
+#ifdef CONFIG_PMIC8058_MIC_BIAS
+	if (pdata->mic_bias_pdata) {
+		mic_bias_cell.platform_data = pdata->mic_bias_pdata;
+		mic_bias_cell.pdata_size =
+			sizeof(struct pm8058_mic_bias_platform_data);
+		rc = mfd_add_devices(pmic->dev, 0, &mic_bias_cell, 1, NULL, 0);
+		if (rc) {
+			pr_err("Failed to add mic bias subdevice ret=%d\n", rc);
+			goto bail;
+		}
+	}
+#endif
 
 	return rc;
 bail:
