@@ -2489,6 +2489,18 @@ config SIMPLE_REMOTE_INVERT_PLUG_DETECTION_STATE
 	  was inserted, but it is high state on some products, so that
 	  we need invert this state on these products.
 
+config SEMC_CHARGER_USB_ARCH
+	bool "Support USB interface for charger"
+	default n
+	help
+	  This enables USB interface for charger.
+
+config SEMC_CHARGER_CRADLE_ARCH
+       bool "Support Cradle for charging"
+       default n
+       help
+	  This enables cradle for charging.
+
 config SONY_SSM
         bool "Support Super Stamina Mode"
         default n
