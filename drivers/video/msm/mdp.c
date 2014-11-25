@@ -2737,6 +2737,8 @@ static int mdp_probe(struct platform_device *pdev)
 		if (rc)
 			return rc;
 
+        mdp_clk_ctrl(1);
+
 		mdp_hw_version();
 
 		/* initializing mdp hw */
@@ -2750,6 +2752,10 @@ static int mdp_probe(struct platform_device *pdev)
 #ifdef CONFIG_FB_MSM_OVERLAY
 		mdp_hw_cursor_init();
 #endif
+
+		if (!(mdp_pdata->cont_splash_enabled))
+			mdp_clk_ctrl(0);
+
 		mdp_resource_initialized = 1;
 		return 0;
 	}
@@ -3121,6 +3127,28 @@ static int mdp_probe(struct platform_device *pdev)
 
 	/* set driver data */
 	platform_set_drvdata(msm_fb_dev, mfd);
+
+	/* panel detection */
+	MSM_FB_INFO("mdp_probe: panel_detect function\n");
+	if (pdata && pdata->panel_detect && pdata->update_panel) {
+	    struct msm_panel_info *pinfo = NULL;
+
+		rc = panel_next_on(msm_fb_dev);
+		if (!rc) {
+			pinfo = pdata->panel_detect(mfd);
+			rc = panel_next_off(msm_fb_dev);
+		}
+		if (!rc && pinfo)
+			mfd->panel_info = *pinfo;
+		pdata->update_panel(pdev);
+#ifdef CONFIG_FB_MSM_MDP40
+		if (mfd->panel.type == MIPI_CMD_PANEL) {
+			mipi = &mfd->panel_info.mipi;
+		}
+#endif
+	} else {
+		MSM_FB_INFO("mdp_probe: no panel_detect function\n");
+	}
 
 	rc = platform_device_add(msm_fb_dev);
 	if (rc) {
