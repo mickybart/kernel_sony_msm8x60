@@ -200,6 +200,21 @@ config FB_MSM_MIPI_DSI_TRULY
 	bool
 	select FB_MSM_MIPI_DSI
 
+config FB_MSM_MIPI_DSI_RENESAS_R63306
+	bool
+	select FB_MSM_MIPI_DSI
+	default n
+
+config FB_MSM_MIPI_DSI_SAMSUNG_S6D6AA0
+	bool
+	select FB_MSM_MIPI_DSI
+	default n
+
+config FB_MSM_MIPI_DSI_NOVATEK_NT35565
+	bool
+	select FB_MSM_MIPI_DSI
+	default n
+
 config FB_MSM_MIPI_DSI_SIMULATOR
 	bool
 	select FB_MSM_MIPI_DSI
@@ -449,8 +464,14 @@ config FB_MSM_WRITEBACK_MSM_PANEL
         bool "MDP overlay write back panel enable"
 	---help---
 	  Support for MDP4 OVERLAY write back mode
+
+config FB_MSM_PANEL_ECO_MODE
+        bool "PANEL ECO MODE support"
+        default n
+
 choice
 	prompt "LCD Panel"
+	optional
 	default FB_MSM_MDDI_AUTO_DETECT
 
 config FB_MSM_LCDC_PRISM_WVGA_PANEL
@@ -764,6 +785,71 @@ config LGIT_VIDEO_WXGA_CABC
 	help
 	  Enable CABC(Content Apaptive Backlight Control) on LGIT Panel
 	  to reduce power consumption
+
+config FB_MSM_MIPI_R63306_PANEL_TMD_MDW30
+	bool "TMD MDW30 Panel"
+	select FB_MSM_MIPI_DSI_RENESAS_R63306
+	default n
+
+config FB_MSM_MIPI_R63306_PANEL_TMD_MDW30F
+	bool "TMD MDW30 Panel"
+	select FB_MSM_MIPI_DSI_RENESAS_R63306
+	default n
+
+config FB_MSM_MIPI_R63306_PANEL_TMD_MDV20
+	bool "TMD MDV20 Panel"
+	select FB_MSM_MIPI_DSI_RENESAS_R63306
+	default n
+
+config FB_MSM_MIPI_R63306_PANEL_TMD_MDV22
+	bool "TMD MDV22 Panel"
+	select FB_MSM_MIPI_DSI_RENESAS_R63306
+	default n
+
+config FB_MSM_MIPI_R63306_PANEL_TMD_MDX80
+	bool "TMD MDX80 Panel"
+	select FB_MSM_MIPI_DSI_RENESAS_R63306
+	default n
+
+config FB_MSM_MIPI_R63306_PANEL_SHARP_LS043K3SX01
+	bool "SHARP LS043K3SX01 Panel"
+	select FB_MSM_MIPI_DSI_RENESAS_R63306
+	default n
+
+config FB_MSM_MIPI_R63306_PANEL_SHARP_LS043K3SX04
+	bool "SHARP LS043K3SX04 Panel"
+	select FB_MSM_MIPI_DSI_RENESAS_R63306
+	default n
+
+config FB_MSM_MIPI_R63306_PANEL_HITACHI_DX12D900VM
+	bool "HITACHI DX12D900VM Panel"
+	select FB_MSM_MIPI_DSI_RENESAS_R63306
+	default n
+
+config FB_MSM_MIPI_R63306_PANEL_SHARP_LS043K3SX01F
+	bool "SHARP LS043K3SX01 Panel"
+	select FB_MSM_MIPI_DSI_RENESAS_R63306
+	default n
+
+config FB_MSM_MIPI_R63306_PANEL_SHARP_LS046K3SX01
+	bool "SHARP LS046K3SX01 Panel"
+	select FB_MSM_MIPI_DSI_RENESAS_R63306
+	default n
+
+config FB_MSM_MIPI_S6D6AA0_PANEL_SONY_ACX439AKM
+	bool "SONY ACX439AKM Panel"
+	select FB_MSM_MIPI_DSI_SAMSUNG_S6D6AA0
+	default n
+
+config FB_MSM_MIPI_S6D6AA0_PANEL_SONY_ACX444AKM
+	bool "SONY ACX444AKM Panel"
+	select FB_MSM_MIPI_DSI_SAMSUNG_S6D6AA0
+	default n
+
+config FB_MSM_MIPI_NT35565_PANEL_SHARP_LS038K3SX01
+	bool "SHARP LS038K3SX01 Panel"
+	select FB_MSM_MIPI_DSI_NOVATEK_NT35565
+	default n
 
 choice
 	prompt "Secondary LCD Panel"

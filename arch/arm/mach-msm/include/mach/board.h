@@ -545,6 +545,15 @@ struct msm_mhl_platform_data {
 	bool mhl_enabled;
 };
 
+struct panel_id;
+
+struct lcd_panel_platform_data {
+	const struct panel_id **default_panels;
+	const struct panel_id **panels;
+	int (*lcd_power)(int on);
+	int (*lcd_reset)(int on);
+};
+
 struct msm_i2c_platform_data {
 	int clk_freq;
 	uint32_t rmutex;
