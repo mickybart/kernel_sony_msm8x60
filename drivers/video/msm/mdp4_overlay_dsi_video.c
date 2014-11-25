@@ -226,7 +226,7 @@ int mdp4_dsi_video_pipe_commit(int cndx, int wait)
 		vsync_irq_enable(INTR_DMA_P_DONE, MDP_DMAP_TERM);
 		spin_unlock_irqrestore(&vctrl->spin_lock, flags);
 		mdp4_dsi_video_wait4dmap(0);
-		if (pipe->ov_blt_addr)
+		if (pipe->ov_blt_addr && mdp4_mixer_staged(MDP4_MIXER0))
 			mdp4_dsi_video_wait4ov(0);
 	}
 
@@ -257,15 +257,17 @@ int mdp4_dsi_video_pipe_commit(int cndx, int wait)
 	pipe = vctrl->base_pipe;
 	spin_lock_irqsave(&vctrl->spin_lock, flags);
 	if (pipe->ov_blt_addr) {
-		mdp4_dsi_video_blt_ov_update(pipe);
-		pipe->ov_cnt++;
-		INIT_COMPLETION(vctrl->ov_comp);
-		vsync_irq_enable(INTR_OVERLAY0_DONE, MDP_OVERLAY0_TERM);
-		mb();
-		vctrl->ov_koff++;
-		/* kickoff overlay engine */
-		mdp4_stat.kickoff_ov0++;
-		outpdw(MDP_BASE + 0x0004, 0);
+		if (mdp4_mixer_staged(MDP4_MIXER0)) {
+			mdp4_dsi_video_blt_ov_update(pipe);
+			pipe->ov_cnt++;
+			INIT_COMPLETION(vctrl->ov_comp);
+			vsync_irq_enable(INTR_OVERLAY0_DONE, MDP_OVERLAY0_TERM);
+			mb();
+			vctrl->ov_koff++;
+			/* kickoff overlay engine */
+			mdp4_stat.kickoff_ov0++;
+			outpdw(MDP_BASE + 0x0004, 0);
+		}
 	} else {
 		/* schedule second phase update  at dmap */
 		INIT_COMPLETION(vctrl->dmap_comp);
@@ -276,10 +278,10 @@ int mdp4_dsi_video_pipe_commit(int cndx, int wait)
 	mdp4_stat.overlay_commit[pipe->mixer_num]++;
 
 	if (wait) {
-		if (pipe->ov_blt_addr)
-			mdp4_dsi_video_wait4ov(0);
-		else
+		if (!pipe->ov_blt_addr)
 			mdp4_dsi_video_wait4dmap(0);
+		else if (mdp4_mixer_staged(MDP4_MIXER0))
+			mdp4_dsi_video_wait4ov(0);
 	}
 
 	return cnt;
@@ -627,6 +629,8 @@ int mdp4_dsi_video_on(struct platform_device *pdev)
 	pipe->src_x = 0;
 	pipe->dst_h = fbi->var.yres;
 	pipe->dst_w = fbi->var.xres;
+	pipe->dst_y = 0;
+	pipe->dst_x = 0;
 	pipe->srcp0_ystride = fbi->fix.line_length;
 	pipe->bpp = bpp;
 
@@ -634,9 +638,6 @@ int mdp4_dsi_video_on(struct platform_device *pdev)
 		pipe->srcp0_addr = mfd->display_iova + buf_offset;
 	else
 		pipe->srcp0_addr = (uint32)(buf + buf_offset);
-
-	pipe->dst_h = fbi->var.yres;
-	pipe->dst_w = fbi->var.xres;
 
 	mdp4_overlay_mdp_pipe_req(pipe, mfd);
 	mdp4_calc_blt_mdp_bw(mfd, pipe);
@@ -1004,10 +1005,13 @@ void mdp4_dmap_done_dsi_video(int cndx)
 		return;
 	}
 
+	if ((mdp_rev <= MDP_REV_41) && !pipe->ov_blt_addr)
+		mdp4_mixer_blend_cfg(MDP4_MIXER0);
+
 	if (vctrl->blt_change) {
 		mdp4_overlayproc_cfg(pipe);
 		mdp4_overlay_dmap_xy(pipe);
-		if (pipe->ov_blt_addr) {
+		if (pipe->ov_blt_addr && mdp4_mixer_staged(MDP4_MIXER0)) {
 			mdp4_dsi_video_blt_ov_update(pipe);
 			pipe->ov_cnt++;
 			/* Prefill one frame */
