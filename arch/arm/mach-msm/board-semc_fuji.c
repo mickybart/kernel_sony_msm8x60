@@ -77,7 +77,6 @@
 
 #include <mach/dma.h>
 #include <mach/mpp.h>
-#include <mach/bcm_bt_lpm.h>
 #include <mach/board.h>
 #include <mach/irqs.h>
 #include <mach/msm_spi.h>
@@ -3462,19 +3461,32 @@ error:
 		msm_gpiomux_put(bt_gpios[i]);
 }
 
-static struct bcm_bt_lpm_platform_data bcm_bt_lpm_pdata = {
-	.gpio_wake = BT_GPIO_WAKE,
-	.gpio_host_wake = BT_GPIO_HOST_WAKE,
-	.request_clock_off_locked = msm_hs_request_clock_off,
-	.request_clock_on_locked = msm_hs_request_clock_on,
+static struct resource bluesleep_resources[] = {
+	{
+		.name   = "gpio_host_wake",
+		.start  = BT_GPIO_HOST_WAKE,
+		.end    = BT_GPIO_HOST_WAKE,
+		.flags  = IORESOURCE_IO,
+	},
+	{
+		.name   = "gpio_ext_wake",
+		.start  = BT_GPIO_WAKE,
+		.end    = BT_GPIO_WAKE,
+		.flags  = IORESOURCE_IO,
+	},
+	{
+		.name   = "host_wake",
+		.start  = MSM_GPIO_TO_INT(BT_GPIO_HOST_WAKE),
+		.end    = MSM_GPIO_TO_INT(BT_GPIO_HOST_WAKE),
+		.flags  = IORESOURCE_IRQ,
+	},
 };
 
-struct platform_device bcm_bt_lpm_device = {
-	.name = "bcm_bt_lpm",
-	.id = 0,
-	.dev = {
-		.platform_data = &bcm_bt_lpm_pdata,
-	},
+static struct platform_device msm_bluesleep_device = {
+	.name		= "bluesleep",
+	.id		= -1,
+	.num_resources	= ARRAY_SIZE(bluesleep_resources),
+	.resource	= bluesleep_resources,
 };
 
 #define CONSOLE_NAME "ttyHSL"
@@ -4289,7 +4301,7 @@ static struct platform_device *fuji_devices[] __initdata = {
 #endif
 	&msm_device_uart_dm1,
 	&msm_bt_power_device,
-	&bcm_bt_lpm_device,
+	&msm_bluesleep_device,
 #ifdef CONFIG_MSM_GSBI5_UART
 	&msm_device_uart_gsbi5,
 #endif

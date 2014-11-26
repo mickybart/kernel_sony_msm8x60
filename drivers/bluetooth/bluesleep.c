@@ -73,7 +73,11 @@
 #define POLARITY_LOW 0
 #define POLARITY_HIGH 1
 
+#ifdef CONFIG_MACH_SEMC_FUJI
+#define BT_PORT_ID	0
+#else
 #define BT_PORT_ID	99
+#endif
 
 /* enable/disable wake-on-bluetooth */
 #define BT_ENABLE_IRQ_WAKE 1
