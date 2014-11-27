@@ -21,8 +21,13 @@
 #include <mach/rpm.h>
 #include "msm_bus_core.h"
 
+#ifdef CONFIG_MACH_SEMC_FUJI
+#define NMASTERS 45
+#define NSLAVES 75
+#else
 #define NMASTERS 39
 #define NSLAVES 68
+#endif
 #define NFAB_8660 5
 
 enum msm_bus_fabric_tiered_slave_type {
