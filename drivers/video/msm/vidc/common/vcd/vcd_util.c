@@ -74,7 +74,7 @@ u32 vcd_critical_section_leave(u32 *cs)
 int vcd_pmem_alloc(u32 size, u8 **kernel_vaddr, u8 **phy_addr)
 {
 	*phy_addr =
-	    (u8 *) pmem_kalloc(size, PMEM_MEMTYPE | PMEM_ALIGNMENT_4K);
+	    (u8 *) allocate_contiguous_ebi_nomap(size, SZ_4K);
 
 	if (!IS_ERR((void *)*phy_addr)) {
 
@@ -83,7 +83,7 @@ int vcd_pmem_alloc(u32 size, u8 **kernel_vaddr, u8 **phy_addr)
 		if (!*kernel_vaddr) {
 			pr_err("%s: could not ioremap in kernel pmem buffers\n",
 			       __func__);
-			pmem_kfree((s32) *phy_addr);
+			free_contiguous_memory_by_paddr((s32) *phy_addr);
 			return -ENOMEM;
 		}
 		pr_debug("write buf: phy addr 0x%08x kernel addr 0x%08x\n",
@@ -100,7 +100,7 @@ int vcd_pmem_alloc(u32 size, u8 **kernel_vaddr, u8 **phy_addr)
 int vcd_pmem_free(u8 *kernel_vaddr, u8 *phy_addr)
 {
 	iounmap((void *)kernel_vaddr);
-	pmem_kfree((s32) phy_addr);
+	free_contiguous_memory_by_paddr((s32) phy_addr);
 
 	return 0;
 }

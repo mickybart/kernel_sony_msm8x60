@@ -22,6 +22,8 @@
 #include <linux/time.h>
 #include <linux/dma-mapping.h>
 #include <linux/android_pmem.h>
+#include <mach/memory.h>
+#include <linux/memory_alloc.h>
 
 #define DEBUG   0
 #define VIDC_ENABLE_DBGFS
