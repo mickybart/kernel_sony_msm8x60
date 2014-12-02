@@ -24,6 +24,8 @@
 #include <linux/delay.h>
 #include <linux/wakelock.h>
 #include <linux/android_pmem.h>
+#include <mach/memory.h>
+#include <linux/memory_alloc.h>
 #include <linux/gpio.h>
 #include <linux/pm_qos.h>
 
@@ -253,9 +255,9 @@ static void audio_client_free(struct audio_client *ac)
 	session_free(ac->session, ac);
 
 	if (ac->buf[0].data)
-		pmem_kfree(ac->buf[0].phys);
+		free_contiguous_memory_by_paddr(ac->buf[0].phys);
 	if (ac->buf[1].data)
-		pmem_kfree(ac->buf[1].phys);
+		free_contiguous_memory_by_paddr(ac->buf[1].phys);
 	kfree(ac);
 }
 
@@ -274,14 +276,12 @@ static struct audio_client *audio_client_alloc(unsigned bufsz)
 	ac->session = n;
 
 	if (bufsz > 0) {
-		ac->buf[0].phys = pmem_kalloc(bufsz,
-					PMEM_MEMTYPE_EBI1|PMEM_ALIGNMENT_4K);
+		ac->buf[0].phys = allocate_contiguous_ebi_nomap(bufsz, SZ_4K);
 		ac->buf[0].data = ioremap(ac->buf[0].phys, bufsz);
 		if (!ac->buf[0].data)
 			goto fail;
 
-		ac->buf[1].phys = pmem_kalloc(bufsz,
-					PMEM_MEMTYPE_EBI1|PMEM_ALIGNMENT_4K);
+		ac->buf[1].phys = allocate_contiguous_ebi_nomap(bufsz, SZ_4K);
 		ac->buf[1].data = ioremap(ac->buf[1].phys, bufsz);
 		if (!ac->buf[1].data)
 			goto fail;
@@ -296,7 +296,7 @@ static struct audio_client *audio_client_alloc(unsigned bufsz)
 	return ac;
 
 fail:
-	pr_err("pmem_kalloc failed\n");
+	pr_err("allocate_contiguous_ebi_nomap failed\n");
 	session_free(n, ac);
 fail_session:
 	audio_client_free(ac);
@@ -553,7 +553,7 @@ static int q6audio_init(void)
 	sdac_clk = clk_get(0, "sdac_clk");
 
 	tx_mute_status = 0;
-	audio_phys = pmem_kalloc(4096, PMEM_MEMTYPE_EBI1|PMEM_ALIGNMENT_4K);
+	audio_phys = allocate_contiguous_ebi_nomap(4096, SZ_4K);
 	audio_data = ioremap(audio_phys, 4096);
 	if (!audio_data) {
 		pr_err("pmem kalloc failed\n");
