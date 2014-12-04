@@ -104,17 +104,12 @@ struct commit_data {
 		(bw) = msm_bus_get_bw_bytes(val); \
 	} while (0)
 
-#define ROUNDED_BW_VAL_FROM_BYTES(bw) \
-	((((bw) >> 17) + 1) & 0x8000 ? 0x7FFF : (((bw) >> 17) + 1))
-
-#define BW_VAL_FROM_BYTES(bw) \
-	((((bw) >> 17) & 0x8000) ? 0x7FFF : ((bw) >> 17))
-
-static uint32_t msm_bus_set_bw_bytes(unsigned long bw)
+static uint16_t msm_bus_set_bw_bytes(uint64_t val)
 {
-	return ((((bw) & 0x1FFFF) && (((bw) >> 17) == 0)) ?
-		ROUNDED_BW_VAL_FROM_BYTES(bw) : BW_VAL_FROM_BYTES(bw));
+	unsigned int intVal;
 
+	intVal = (unsigned int)((val + ((1 << 17) - 1)) >> 17);
+	return (intVal > 0x7FFF) ? 0x7FFF : (uint16_t)intVal;
 }
 
 uint64_t msm_bus_get_bw_bytes(unsigned long val)
@@ -128,13 +123,13 @@ uint16_t msm_bus_get_bw(unsigned long val)
 }
 
 static uint16_t msm_bus_create_bw_tier_pair_bytes(uint8_t type,
-	unsigned long bw)
+	uint64_t bw)
 {
 	return ((((type) == MSM_BUS_BW_TIER1 ? 1 : 0) << 15) |
 	 (msm_bus_set_bw_bytes(bw)));
 };
 
-uint16_t msm_bus_create_bw_tier_pair(uint8_t type, unsigned long bw)
+uint16_t msm_bus_create_bw_tier_pair(uint8_t type, uint64_t bw)
 {
 	return (((type) == MSM_BUS_BW_TIER1 ? 1 : 0) << 15) | ((bw) & 0x7FFF);
 }
@@ -268,7 +263,7 @@ static void msm_bus_rpm_update_bw(struct msm_bus_inode_info *hop,
 			/* If there is tier, calculate arb for commit */
 			if (hop->node_info->tier) {
 				uint16_t tier;
-				unsigned long tieredbw = sel_cd->actarb[index];
+				int64_t tieredbw = sel_cd->actarb[index];
 				if (GET_TIER(sel_cd->arb[index]))
 					tier = MSM_BUS_BW_TIER1;
 				else if (master_tiers)
@@ -295,14 +290,14 @@ static void msm_bus_rpm_update_bw(struct msm_bus_inode_info *hop,
 						num_sports);
 
 				/* If bw is 0, update tier to default */
-				if (!tieredbw)
+				if (tieredbw <= 0)
 					tier = MSM_BUS_BW_TIER2;
 				/* Update Arb for fab,get HW Mport from enum */
 				sel_cd->arb[index] =
 					msm_bus_create_bw_tier_pair_bytes(tier,
 					tieredbw);
 				sel_cd->actarb[index] = tieredbw;
-				MSM_BUS_DBG("tr:%d mpor:%d tbw:%ld bws: %lld\n",
+				MSM_BUS_DBG("tr:%d mpor:%d tbw:%lld bws: %lld\n",
 					hop_tier, info->node_info->masterp[i],
 					tieredbw, *hop->link_info.sel_bw);
 			}
@@ -313,14 +308,17 @@ static void msm_bus_rpm_update_bw(struct msm_bus_inode_info *hop,
 	ports = INTERLEAVED_VAL(fab_pdata, hop->node_info->num_sports);
 	for (i = 0; i < ports; i++) {
 		sel_cd->bwsum[hop->node_info->slavep[i]]
-			= (uint16_t)msm_bus_create_bw_tier_pair_bytes(0,
-			(uint32_t)msm_bus_div64(hop->node_info->num_sports,
+			= msm_bus_create_bw_tier_pair_bytes(0,
+			msm_bus_div64(hop->node_info->num_sports,
 			*hop->link_info.sel_bw));
-		MSM_BUS_DBG("slavep:%d, link_bw: %u\n",
-			hop->node_info->slavep[i], (uint32_t)
+		MSM_BUS_DBG("slavep:%d, link_bw: %lld\n",
+			hop->node_info->slavep[i],
 			msm_bus_div64(hop->node_info->num_sports,
 			*hop->link_info.sel_bw));
 	}
+	*hop->link_info.sel_bw = 
+	    msm_bus_get_bw_bytes(sel_cd->bwsum[hop->node_info->slavep[0]]) * 
+	    hop->node_info->num_sports;
 }
 
 #define RPM_SHIFT_VAL 16
@@ -467,7 +465,7 @@ struct commit_data {
 #define MODE1_IMM(val)	((val) & 0x7F)
 #define __CLZ(x) ((8 * sizeof(uint32_t)) - 1 - __fls(x))
 
-static uint8_t msm_bus_set_bw_bytes(unsigned long val)
+static uint8_t msm_bus_set_bw_bytes(uint64_t val)
 {
 	unsigned int shift;
 	unsigned int intVal;
@@ -523,12 +521,12 @@ uint64_t msm_bus_get_bw_bytes(unsigned long val)
 }
 
 static uint8_t msm_bus_create_bw_tier_pair_bytes(uint8_t type,
-	unsigned long bw)
+	uint64_t bw)
 {
 	return msm_bus_set_bw_bytes(bw);
 };
 
-uint8_t msm_bus_create_bw_tier_pair(uint8_t type, unsigned long bw)
+uint8_t msm_bus_create_bw_tier_pair(uint8_t type, uint64_t bw)
 {
 	return msm_bus_create_bw_tier_pair_bytes(type, bw);
 };
@@ -749,9 +747,9 @@ static int msm_bus_rpm_commit_arb(struct msm_bus_fabric_registration
 	-(msm_bus_get_bw_bytes(msm_bus_create_bw_tier_pair_bytes(0, -(x)))) : \
 	(msm_bus_get_bw_bytes(msm_bus_create_bw_tier_pair_bytes(0, x))))
 
-static uint16_t msm_bus_pack_bwsum_bytes(unsigned long bw)
+static uint16_t msm_bus_pack_bwsum_bytes(uint64_t bw)
 {
-	return (bw + ((1 << 20) - 1)) >> 20;
+	return (uint16_t)((bw + ((1 << 20) - 1)) >> 20);
 };
 
 static void msm_bus_rpm_update_bw(struct msm_bus_inode_info *hop,
@@ -787,7 +785,7 @@ static void msm_bus_rpm_update_bw(struct msm_bus_inode_info *hop,
 			/* If there is tier, calculate arb for commit */
 			if (hop->node_info->tier) {
 				uint16_t tier;
-				unsigned long tieredbw;
+				int64_t tieredbw;
 				if (master_tiers)
 					tier = master_tiers[0] - 1;
 				else
@@ -810,7 +808,7 @@ static void msm_bus_rpm_update_bw(struct msm_bus_inode_info *hop,
 				sel_cd->arb[tier][index] =
 				msm_bus_create_bw_tier_pair_bytes(0, tieredbw);
 				sel_cd->actarb[tier][index] = tieredbw;
-				MSM_BUS_DBG("tr:%d mpor:%d tbw:%lu bws: %lld\n",
+				MSM_BUS_DBG("tr:%d mpor:%d tbw:%lld bws: %lld\n",
 				hop_tier, info->node_info->masterp[i], tieredbw,
 				*hop->link_info.sel_bw);
 			}
@@ -822,7 +820,7 @@ static void msm_bus_rpm_update_bw(struct msm_bus_inode_info *hop,
 	ports = INTERLEAVED_VAL(fab_pdata, hop->node_info->num_sports);
 	for (i = 0; i < ports; i++) {
 		sel_cd->bwsum[hop->node_info->slavep[i]]
-			= msm_bus_pack_bwsum_bytes((uint32_t)
+			= msm_bus_pack_bwsum_bytes(
 			msm_bus_div64(hop->node_info->num_sports,
 			*hop->link_info.sel_bw));
 		MSM_BUS_DBG("slavep:%d, link_bw: %lld\n",

@@ -3382,7 +3382,9 @@ void mmc_pm_keeppwr_control(struct mmc_host *mmc, int pwr)
 	if (pwr) {
 		spin_lock_irqsave(&host->lock, flags);
 		if (!atomic_read(&host->clks_on)) {
+			spin_unlock_irqrestore(&host->lock, flags);
 			msmsdcc_setup_clocks(host, true);
+			spin_lock_irqsave(&host->lock, flags);
 			pr_debug("%s : Turning _ON_ clock for SDIO block\n", __func__);
 			atomic_set(&host->clks_on, 1);
 			if (mmc->card && mmc->card->type == MMC_TYPE_SDIO) {
@@ -3426,7 +3428,9 @@ void mmc_pm_keeppwr_control(struct mmc_host *mmc, int pwr)
 	spin_lock_irqsave(&host->lock, flags);
 	if (!atomic_read(&host->clks_on)) {
 		/* force the clocks to be on */
+		spin_unlock_irqrestore(&host->lock, flags);
 		msmsdcc_setup_clocks(host, true);
+		spin_lock_irqsave(&host->lock, flags);
 		/*
 		 * give atleast 2 MCLK cycles delay for clocks
 		 * and SDCC core to stabilize
@@ -3438,7 +3442,9 @@ void mmc_pm_keeppwr_control(struct mmc_host *mmc, int pwr)
 
 	if (!atomic_read(&host->clks_on)) {
 		/* force the clocks to be off */
+		spin_unlock_irqrestore(&host->lock, flags);
 		msmsdcc_setup_clocks(host, false);
+		spin_lock_irqsave(&host->lock, flags);
 		/*
 		 * give atleast 2 MCLK cycles delay for clocks
 		 * and SDCC core to stabilize
@@ -3464,7 +3470,9 @@ void mmc_pm_keeppwr_control(struct mmc_host *mmc, int pwr)
 			}
 			msmsdcc_delay(host);
 		}
+		spin_unlock_irqrestore(&host->lock, flags);
 		msmsdcc_setup_clocks(host, false);
+		spin_lock_irqsave(&host->lock, flags);
 		pr_debug("%s: %s: Turning _OFF_ clock for SDIO block\n",
 			mmc_hostname(host->mmc), __func__);
 
