@@ -35,6 +35,8 @@
 #include <mach/peripheral-loader.h>
 #include <mach/msm_bus.h>
 #include <mach/msm_bus_board.h>
+#include <mach/memory.h>
+#include <linux/memory_alloc.h>
 #include "tzcomi.h"
 
 #define TZCOM_DEV "tzcom"
@@ -1176,8 +1178,7 @@ static int __init tzcom_init(void)
 		goto class_device_destroy;
 	}
 
-	sb_in_phys = pmem_kalloc(sb_in_length, PMEM_MEMTYPE_EBI1 |
-			PMEM_ALIGNMENT_4K);
+	sb_in_phys = allocate_contiguous_ebi_nomap(sb_in_length, SZ_4K);
 	if (IS_ERR((void *)sb_in_phys)) {
 		PERR("could not allocte in kernel pmem buffers for sb_in");
 		sb_in_phys = 0;
@@ -1196,8 +1197,7 @@ static int __init tzcom_init(void)
 	PDEBUG("sb_in virt address: %p, phys address: 0x%x",
 			sb_in_virt, tzcom_virt_to_phys(sb_in_virt));
 
-	sb_out_phys = pmem_kalloc(sb_out_length, PMEM_MEMTYPE_EBI1 |
-			PMEM_ALIGNMENT_4K);
+	sb_out_phys = allocate_contiguous_ebi_nomap(sb_out_length, SZ_4K);
 	if (IS_ERR((void *)sb_out_phys)) {
 		PERR("could not allocte in kernel pmem buffers for sb_out");
 		sb_out_phys = 0;
@@ -1247,11 +1247,11 @@ class_device_destroy:
 	if (sb_in_virt)
 		iounmap(sb_in_virt);
 	if (sb_in_phys)
-		pmem_kfree(sb_in_phys);
+		free_contiguous_memory_by_paddr(sb_in_phys);
 	if (sb_out_virt)
 		iounmap(sb_out_virt);
 	if (sb_out_phys)
-		pmem_kfree(sb_out_phys);
+		free_contiguous_memory_by_paddr(sb_out_phys);
 	device_destroy(driver_class, tzcom_device_no);
 class_destroy:
 	class_destroy(driver_class);
@@ -1266,11 +1266,11 @@ static void __exit tzcom_exit(void)
 	if (sb_in_virt)
 		iounmap(sb_in_virt);
 	if (sb_in_phys)
-		pmem_kfree(sb_in_phys);
+		free_contiguous_memory_by_paddr(sb_in_phys);
 	if (sb_out_virt)
 		iounmap(sb_out_virt);
 	if (sb_out_phys)
-		pmem_kfree(sb_out_phys);
+		free_contiguous_memory_by_paddr(sb_out_phys);
 	if (pil != NULL) {
 		pil_put(pil);
 		pil = NULL;

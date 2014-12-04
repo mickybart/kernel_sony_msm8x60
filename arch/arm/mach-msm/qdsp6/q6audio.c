@@ -23,6 +23,8 @@
 #include <linux/delay.h>
 #include <linux/wakelock.h>
 #include <linux/android_pmem.h>
+#include <mach/memory.h>
+#include <linux/memory_alloc.h>
 #include <linux/firmware.h>
 #include <linux/miscdevice.h>
 #include <linux/pm_qos.h>
@@ -310,11 +312,11 @@ static void audio_client_free(struct audio_client *ac)
 
 	if (ac->buf[0].data) {
 		iounmap(ac->buf[0].data);
-		pmem_kfree(ac->buf[0].phys);
+		free_contiguous_memory_by_paddr(ac->buf[0].phys);
 	}
 	if (ac->buf[1].data) {
 		iounmap(ac->buf[1].data);
-		pmem_kfree(ac->buf[1].phys);
+		free_contiguous_memory_by_paddr(ac->buf[1].phys);
 	}
 	kfree(ac);
 }
@@ -335,13 +337,11 @@ static struct audio_client *audio_client_alloc(unsigned bufsz)
 	ac->session = n;
 
 	if (bufsz > 0) {
-		ac->buf[0].phys = pmem_kalloc(bufsz,
-					PMEM_MEMTYPE_EBI1|PMEM_ALIGNMENT_4K);
+		ac->buf[0].phys = allocate_contiguous_ebi_nomap(bufsz, SZ_4K);
 		ac->buf[0].data = ioremap(ac->buf[0].phys, bufsz);
 		if (!ac->buf[0].data)
 			goto fail;
-		ac->buf[1].phys = pmem_kalloc(bufsz,
-					PMEM_MEMTYPE_EBI1|PMEM_ALIGNMENT_4K);
+		ac->buf[1].phys = allocate_contiguous_ebi_nomap(bufsz, SZ_4K);
 		ac->buf[1].data = ioremap(ac->buf[1].phys, bufsz);
 		if (!ac->buf[1].data)
 			goto fail;
@@ -906,7 +906,7 @@ static int q6audio_init(void)
 	icodec_tx_clk = clk_get(0, "icodec_tx_clk");
 	ecodec_clk = clk_get(0, "ecodec_clk");
 	sdac_clk = clk_get(0, "sdac_clk");
-	audio_phys = pmem_kalloc(4096, PMEM_MEMTYPE_EBI1|PMEM_ALIGNMENT_4K);
+	audio_phys = allocate_contiguous_ebi_nomap(4096, SZ_4K);
 	audio_data = ioremap(audio_phys, 4096);
 
 	pr_info("[%s:%s] attach ADSP\n", __MM_FILE__, __func__);
