@@ -45,6 +45,8 @@
 #define MSM_8x25_ADC_DEV_ID		0
 #define MSM_8x25_CHAN_ID		16
 
+static DEFINE_MUTEX(first_lock);
+
 enum dal_error {
 	DAL_ERROR_INVALID_DEVICE_IDX = 1,
 	DAL_ERROR_INVALID_CHANNEL_IDX,
@@ -734,14 +736,17 @@ static int msm_adc_blocking_conversion(struct msm_adc_drv *msm_adc,
 	struct msm_adc_channels *channel = &pdata->channel[hwmon_chan];
 	int ret = 0;
 
+	mutex_lock(&first_lock);
 	if (conv_first_request) {
 		ret = pm8058_xoadc_calib_device(channel->adc_dev_instance);
 		if (ret) {
+			mutex_unlock(&first_lock);
 			pr_err("pmic8058 xoadc calibration failed, retry\n");
 			return ret;
 		}
 		conv_first_request = false;
 	}
+	mutex_unlock(&first_lock);
 
 	channel->adc_access_fn->adc_slot_request(channel->adc_dev_instance,
 									&slot);
@@ -831,14 +836,17 @@ int32_t adc_channel_request_conv(void *h, struct completion *conv_complete_evt)
 	struct adc_conv_slot *slot;
 	int ret;
 
+	mutex_lock(&first_lock);
 	if (conv_first_request) {
 		ret = pm8058_xoadc_calib_device(channel->adc_dev_instance);
 		if (ret) {
+			mutex_unlock(&first_lock);
 			pr_err("pmic8058 xoadc calibration failed, retry\n");
 			return ret;
 		}
 		conv_first_request = false;
 	}
+	mutex_unlock(&first_lock);
 
 	channel->adc_access_fn->adc_slot_request(channel->adc_dev_instance,
 									&slot);
