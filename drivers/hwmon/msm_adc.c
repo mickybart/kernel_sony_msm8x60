@@ -755,7 +755,7 @@ static int msm_adc_blocking_conversion(struct msm_adc_drv *msm_adc,
 		slot->chan_adc_calib = channel->adc_calib_type;
 		queue_work(msm_adc_drv->wq, &slot->work);
 
-		wait_for_completion_interruptible(&slot->comp);
+		wait_for_completion(&slot->comp);
 		*result = slot->conv.result;
 		channel->adc_access_fn->adc_restore_slot(
 					channel->adc_dev_instance, slot);
