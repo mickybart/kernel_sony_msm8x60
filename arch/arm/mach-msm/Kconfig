@@ -822,6 +822,28 @@ config MACH_SEMC_AOBA
 
 endchoice
 
+choice
+	prompt "SEMC Nozomi clocking"
+	depends on MACH_SEMC_NOZOMI
+	default MACH_SEMC_NOZOMI_OC_NO
+
+config MACH_SEMC_NOZOMI_OC_NO
+        bool "SEMC Nozomi Factory Frequencies"
+        help
+          Standard clocking for Sony Ericsson Nozomi device
+
+config MACH_SEMC_NOZOMI_OC_STANDARD
+        bool "SEMC Nozomi OC"
+        help
+          Overclocking for the Sony Ericsson Nozomi device
+
+config MACH_SEMC_NOZOMI_OC_ULTRA
+        bool "SEMC Nozomi OC ULTRA"
+        help
+          Ultra Overclocking for the Sony Ericsson Nozomi device
+
+endchoice
+
 config MACH_MSM8960_CDP
 	depends on ARCH_MSM8960
 	bool "MSM8960 CDP"
