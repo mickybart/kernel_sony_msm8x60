@@ -724,7 +724,11 @@ static struct msm_bus_vectors grp2d0_nominal_vectors[] = {
 		.src = MSM_BUS_MASTER_GRAPHICS_2D_CORE0,
 		.dst = MSM_BUS_SLAVE_EBI_CH0,
 		.ab = 0,
+#ifdef CONFIG_MACH_SEMC_NOZOMI_OC_NO
 		.ib = KGSL_CONVERT_TO_MBPS(1000),
+#else
+		.ib = KGSL_CONVERT_TO_MBPS(1638),
+#endif
 	},
 };
 
@@ -772,7 +776,11 @@ static struct msm_bus_vectors grp2d1_nominal_vectors[] = {
 		.src = MSM_BUS_MASTER_GRAPHICS_2D_CORE1,
 		.dst = MSM_BUS_SLAVE_EBI_CH0,
 		.ab = 0,
+#ifdef CONFIG_MACH_SEMC_NOZOMI_OC_NO
 		.ib = KGSL_CONVERT_TO_MBPS(1000),
+#else
+		.ib = KGSL_CONVERT_TO_MBPS(1638),
+#endif
 	},
 };
 
@@ -950,6 +958,7 @@ static struct resource kgsl_2d0_resources[] = {
 
 static struct kgsl_device_platform_data kgsl_2d0_pdata = {
 	.pwrlevel = {
+#ifdef CONFIG_MACH_SEMC_NOZOMI_OC_NO
 		{
 			.gpu_freq = 200000000,
 			.bus_freq = 2,
@@ -962,9 +971,31 @@ static struct kgsl_device_platform_data kgsl_2d0_pdata = {
 			.gpu_freq = 27000000,
 			.bus_freq = 0,
 		},
+#else
+		{
+			.gpu_freq = 266667000,
+			.bus_freq = 3,
+		},
+		{
+			.gpu_freq = 200000000,
+			.bus_freq = 2,
+		},
+		{
+			.gpu_freq = 96000000,
+			.bus_freq = 1,
+		},
+		{
+			.gpu_freq = 27000000,
+			.bus_freq = 0,
+		},
+#endif
 	},
 	.init_level = 0,
+#ifdef CONFIG_MACH_SEMC_NOZOMI_OC_NO
 	.num_levels = 3,
+#else
+	.num_levels = 4,
+#endif
 	.set_grp_async = NULL,
 	.idle_timeout = HZ/5,
 	.clk_map = KGSL_CLK_CORE | KGSL_CLK_IFACE,
@@ -1000,6 +1031,7 @@ static struct resource kgsl_2d1_resources[] = {
 
 static struct kgsl_device_platform_data kgsl_2d1_pdata = {
 	.pwrlevel = {
+#ifdef CONFIG_MACH_SEMC_NOZOMI_OC_NO
 		{
 			.gpu_freq = 200000000,
 			.bus_freq = 2,
@@ -1012,9 +1044,31 @@ static struct kgsl_device_platform_data kgsl_2d1_pdata = {
 			.gpu_freq = 27000000,
 			.bus_freq = 0,
 		},
+#else
+		{
+			.gpu_freq = 266667000,
+			.bus_freq = 3,
+		},
+		{
+			.gpu_freq = 200000000,
+			.bus_freq = 2,
+		},
+		{
+			.gpu_freq = 96000000,
+			.bus_freq = 1,
+		},
+		{
+			.gpu_freq = 27000000,
+			.bus_freq = 0,
+		},
+#endif
 	},
 	.init_level = 0,
+#ifdef CONFIG_MACH_SEMC_NOZOMI_OC_NO
 	.num_levels = 3,
+#else
+	.num_levels = 4,
+#endif
 	.set_grp_async = NULL,
 	.idle_timeout = HZ/5,
 	.clk_map = KGSL_CLK_CORE | KGSL_CLK_IFACE,
