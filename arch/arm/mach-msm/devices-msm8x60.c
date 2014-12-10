@@ -660,7 +660,11 @@ static struct msm_bus_vectors grp3d_nominal_high_vectors[] = {
 		.src = MSM_BUS_MASTER_GRAPHICS_3D,
 		.dst = MSM_BUS_SLAVE_EBI_CH0,
 		.ab = 0,
+#ifdef CONFIG_MACH_SEMC_NOZOMI_OC_NO
 		.ib = KGSL_CONVERT_TO_MBPS(2008),
+#else
+		.ib = KGSL_CONVERT_TO_MBPS(2484),
+#endif
 	},
 };
 
@@ -669,7 +673,11 @@ static struct msm_bus_vectors grp3d_max_vectors[] = {
 		.src = MSM_BUS_MASTER_GRAPHICS_3D,
 		.dst = MSM_BUS_SLAVE_EBI_CH0,
 		.ab = 0,
+#ifdef CONFIG_MACH_SEMC_NOZOMI_OC_NO
 		.ib = KGSL_CONVERT_TO_MBPS(2484),
+#else
+		.ib = KGSL_CONVERT_TO_MBPS(2976),
+#endif
 	},
 };
 
