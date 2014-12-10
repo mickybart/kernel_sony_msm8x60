@@ -199,13 +199,7 @@ static int msm_hsl_loopback_enable_set(void *data, u64 val)
 	unsigned long flags;
 	int ret = 0;
 
-	ret = clk_set_rate(msm_hsl_port->clk, 7372800);
-	if (!ret)
-		clk_en(port, 1);
-	else {
-		pr_err("%s(): Error: Setting the clock rate\n", __func__);
-		return -EINVAL;
-	}
+	clk_en(port, 1);
 
 	vid = msm_hsl_port->ver_id;
 	if (val) {
@@ -232,14 +226,7 @@ static int msm_hsl_loopback_enable_get(void *data, u64 *val)
 	unsigned long flags;
 	int ret = 0;
 
-	ret = clk_set_rate(msm_hsl_port->clk, 7372800);
-	if (!ret)
-		clk_en(port, 1);
-	else {
-		pr_err("%s(): Error setting clk rate\n", __func__);
-		return -EINVAL;
-	}
-
+	clk_en(port, 1);
 	spin_lock_irqsave(&port->lock, flags);
 	ret = msm_hsl_read(port, regmap[msm_hsl_port->ver_id][UARTDM_MR2]);
 	spin_unlock_irqrestore(&port->lock, flags);
@@ -997,23 +984,12 @@ static int msm_hsl_verify_port(struct uart_port *port,
 static void msm_hsl_power(struct uart_port *port, unsigned int state,
 			  unsigned int oldstate)
 {
-	int ret;
-	struct msm_hsl_port *msm_hsl_port = UART_TO_MSM(port);
-
 	switch (state) {
 	case 0:
-		ret = clk_set_rate(msm_hsl_port->clk, 7372800);
-		if (ret)
-			pr_err("%s(): Error setting UART clock rate\n",
-								__func__);
 		clk_en(port, 1);
 		break;
 	case 3:
 		clk_en(port, 0);
-		ret = clk_set_rate(msm_hsl_port->clk, 0);
-		if (ret)
-			pr_err("%s(): Error setting UART clock rate to zero.\n",
-								__func__);
 		break;
 	default:
 		pr_err("%s(): msm_serial_hsl: Unknown PM state %d\n",
@@ -1411,6 +1387,12 @@ static int __devinit msm_serial_hsl_probe(struct platform_device *pdev)
 	if (unlikely(IS_ERR(msm_hsl_port->pclk))) {
 		printk(KERN_ERR "%s: Error getting pclk\n", __func__);
 		return PTR_ERR(msm_hsl_port->pclk);
+	}
+
+	ret = clk_set_rate(msm_hsl_port->clk, 7372800);
+	if (ret) {
+		printk(KERN_ERR "%s: Error setting UART clock rate\n", __func__);
+		return ret;
 	}
 
 	uart_resource = platform_get_resource_byname(pdev,

@@ -81,7 +81,7 @@ inter:
 struct commit_data {
 	uint16_t *bwsum;
 	uint16_t *arb;
-	unsigned long *actarb;
+	uint64_t *actarb;
 };
 
 /*
@@ -185,7 +185,7 @@ static int msm_bus_rpm_allocate_commit_data(struct msm_bus_fabric_registration
 		kfree(*cd);
 		return -ENOMEM;
 	}
-	(*cd)->actarb = kzalloc(((sizeof(unsigned long *)) *
+	(*cd)->actarb = kzalloc(((sizeof(uint64_t)) *
 		(fab_pdata->ntieredslaves * fab_pdata->nmasters) + 1),
 		GFP_KERNEL);
 	if (!(*cd)->actarb) {
@@ -454,7 +454,7 @@ static int msm_bus_rpm_commit_arb(struct msm_bus_fabric_registration
 struct commit_data {
 	uint16_t *bwsum;
 	uint8_t *arb[NUM_TIERS];
-	unsigned long *actarb[NUM_TIERS];
+	uint64_t *actarb[NUM_TIERS];
 };
 
 #define MODE_BIT(val) ((val) & 0x80)
@@ -560,7 +560,7 @@ static int msm_bus_rpm_allocate_commit_data(struct msm_bus_fabric_registration
 			goto arb_err;
 		}
 
-		(*cd)->actarb[i] = kzalloc(((sizeof(unsigned long *)) *
+		(*cd)->actarb[i] = kzalloc(((sizeof(uint64_t)) *
 			(fab_pdata->ntieredslaves * fab_pdata->nmasters) + 1),
 			GFP_KERNEL);
 		if (!(*cd)->actarb[i]) {

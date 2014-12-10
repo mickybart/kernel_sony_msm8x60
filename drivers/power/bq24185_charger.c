@@ -584,6 +584,14 @@ static irqreturn_t bq24185_thread_irq(int irq, void *data)
 	struct bq24185_status_data old_status = bd->cached_status;
 
 	dev_dbg(&bd->clientp->dev, "Receiving threaded interrupt\n");
+
+	if (!bq24185_check_status(bd) &&
+	    memcmp(&bd->cached_status, &old_status, sizeof bd->cached_status)) {
+		dev_info(&bd->clientp->dev, "Charger status: %d\n",
+			bd->cached_status.stat);
+		bq24185_update_power_supply(bd);
+	}
+
 	/* Delay the interrupt handling since STATx in register '0' is not
 	 * always updated when receiving this.
 	 * 300 ms according to TI.
