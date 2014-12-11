@@ -443,7 +443,11 @@ static int zs_cpu_notifier(struct notifier_block *nb, unsigned long action,
 		area = &per_cpu(zs_map_area, cpu);
 		if (area->vm)
 			break;
+#ifdef CONFIG_X86
 		area->vm = alloc_vm_area(2 * PAGE_SIZE, area->vm_ptes);
+#else
+		area->vm = alloc_vm_area(2 * PAGE_SIZE, NULL);
+#endif
 		if (!area->vm)
 			return notifier_from_errno(-ENOMEM);
 		break;
@@ -692,13 +696,30 @@ void *zs_map_object(struct zs_pool *pool, void *handle)
 	} else {
 		/* this object spans two pages */
 		struct page *nextp;
+#ifndef CONFIG_X86
+		struct page *pages[2];
+		struct page **page_array = &pages[0];
+		int err;
+#endif
 
 		nextp = get_next_page(page);
 		BUG_ON(!nextp);
 
 
+#ifdef CONFIG_X86
 		set_pte(area->vm_ptes[0], mk_pte(page, PAGE_KERNEL));
 		set_pte(area->vm_ptes[1], mk_pte(nextp, PAGE_KERNEL));
+#else
+		page_array[0] = page; 
+		page_array[1] = nextp; 
+
+		/* 
+		 * map_vm_area never fail because we already allocated 
+		 * pages for page table in alloc_vm_area. 
+		 */ 
+		err = map_vm_area(area->vm, PAGE_KERNEL, &page_array); 
+		BUG_ON(err); 
+#endif
 
 		/* We pre-allocated VM area so mapping can never fail */
 		area->vm_addr = area->vm->addr;
@@ -707,6 +728,17 @@ void *zs_map_object(struct zs_pool *pool, void *handle)
 	return area->vm_addr + off;
 }
 EXPORT_SYMBOL_GPL(zs_map_object);
+
+#ifndef CONFIG_X86
+static void local_unmap_kernel_range(unsigned long addr, unsigned long size) 
+{ 
+	unsigned long end = addr + size; 
+ 
+	flush_cache_vunmap(addr, end); 
+	unmap_kernel_range_noflush(addr, size); 
+	local_flush_tlb_kernel_range(addr, end); 
+} 
+#endif
 
 void zs_unmap_object(struct zs_pool *pool, void *handle)
 {
@@ -729,10 +761,15 @@ void zs_unmap_object(struct zs_pool *pool, void *handle)
 	if (off + class->size <= PAGE_SIZE) {
 		kunmap_atomic(area->vm_addr);
 	} else {
+#ifdef CONFIG_X86
 		set_pte(area->vm_ptes[0], __pte(0));
 		set_pte(area->vm_ptes[1], __pte(0));
 		__flush_tlb_one((unsigned long)area->vm_addr);
 		__flush_tlb_one((unsigned long)area->vm_addr + PAGE_SIZE);
+#else
+		local_unmap_kernel_range((unsigned long)area->vm->addr, 
+					PAGE_SIZE * 2); 
+#endif
 	}
 	put_cpu_var(zs_map_area);
 }
