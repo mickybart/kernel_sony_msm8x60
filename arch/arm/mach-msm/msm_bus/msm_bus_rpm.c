@@ -316,9 +316,6 @@ static void msm_bus_rpm_update_bw(struct msm_bus_inode_info *hop,
 			msm_bus_div64(hop->node_info->num_sports,
 			*hop->link_info.sel_bw));
 	}
-	*hop->link_info.sel_bw = 
-	    msm_bus_get_bw_bytes(sel_cd->bwsum[hop->node_info->slavep[0]]) * 
-	    hop->node_info->num_sports;
 }
 
 #define RPM_SHIFT_VAL 16

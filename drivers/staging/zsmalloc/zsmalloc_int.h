@@ -111,6 +111,9 @@ static const int fullness_threshold_frac = 4;
 
 struct mapping_area {
 	struct vm_struct *vm;
+#ifdef CONFIG_X86
+	pte_t *vm_ptes[2];
+#endif
 	char *vm_addr;
 };
 
