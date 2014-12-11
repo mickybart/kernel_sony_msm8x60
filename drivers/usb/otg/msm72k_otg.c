@@ -1,5 +1,6 @@
 /* Copyright (c) 2009-2012, The Linux Foundation. All rights reserved.
- * Copyright (c) 2009-2012 Sony Ericsson Mobile Comm
+ * Copyright (c) 2010-2012 Sony Ericsson Mobile Communications AB.
+ * Copyright (C) 2012 Sony Mobile Communications AB.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -32,6 +33,10 @@
 #include <linux/uaccess.h>
 #include <mach/clk.h>
 #include <mach/msm_xo.h>
+
+#ifdef CONFIG_USB_HOST_EXTRA_NOTIFICATION
+#include <linux/usb/host_ext_event.h>
+#endif
 
 #define MSM_USB_BASE	(dev->regs)
 #define USB_LINK_RESET_TIMEOUT	(msecs_to_jiffies(10))
