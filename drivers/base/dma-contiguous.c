@@ -77,6 +77,7 @@ static struct cma *cma_get_area(phys_addr_t base)
 	return NULL;
 }
 
+#ifdef CONFIG_OF
 static struct cma *cma_get_area_by_name(const char *name)
 {
 	int i;
@@ -88,7 +89,7 @@ static struct cma *cma_get_area_by_name(const char *name)
 			return cma_areas[i].cma;
 	return NULL;
 }
-
+#endif
 
 
 #ifdef CONFIG_CMA_SIZE_MBYTES
