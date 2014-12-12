@@ -33,6 +33,7 @@
 #include <linux/bma250_ng.h>
 #include <linux/apds9702.h>
 #include <linux/clearpad.h>
+#include <linux/dma-contiguous.h>
 #include <linux/dma-mapping.h>
 #include <linux/lm356x.h>
 //adding by rick
@@ -4469,10 +4470,23 @@ static struct ion_cp_heap_pdata cp_wb_ion_pdata = {
 static struct ion_co_heap_pdata mm_fw_co_ion_pdata = {
 	.adjacent_mem_id = ION_CP_MM_HEAP_ID,
 };
+#endif
 
 static struct ion_co_heap_pdata co_ion_pdata = {
 	.adjacent_mem_id = INVALID_HEAP_ID,
 	.align = PAGE_SIZE,
+};
+
+#ifdef CONFIG_CMA
+static u64 msm_dmamask = DMA_BIT_MASK(32);
+
+static struct platform_device ion_cma_heap_device = {
+	.name = "ion-cma-heap-device",
+	.id = -1,
+	.dev = {
+		.dma_mask = &msm_dmamask,
+		.coherent_dma_mask = DMA_BIT_MASK(32),
+	}
 };
 #endif
 
@@ -4522,6 +4536,17 @@ struct ion_platform_heap msm8x60_heaps [] = {
 			.extra_data = (void *) &cp_mfc_ion_pdata,
 		},
 #ifndef CONFIG_MSM_IOMMU
+#ifdef CONFIG_CMA
+		{
+			.id	= ION_SF_HEAP_ID,
+			.type	= ION_HEAP_TYPE_DMA,
+			.name	= ION_SF_HEAP_NAME,
+			.size	= MSM_ION_SF_SIZE,
+			.memory_type = ION_EBI_TYPE,
+			.extra_data = (void *)&co_ion_pdata,
+			.priv	= &ion_cma_heap_device.dev,
+		},
+#else
 		{
 			.id	= ION_SF_HEAP_ID,
 			.type	= ION_HEAP_TYPE_CARVEOUT,
@@ -4530,6 +4555,7 @@ struct ion_platform_heap msm8x60_heaps [] = {
 			.memory_type = ION_EBI_TYPE,
 			.extra_data = (void *)&co_ion_pdata,
 		},
+#endif
 #else
 		{
 			.id	= ION_IOMMU_HEAP_ID,
@@ -4537,6 +4563,17 @@ struct ion_platform_heap msm8x60_heaps [] = {
 			.name	= ION_IOMMU_HEAP_NAME,
 		},
 #endif
+#ifdef CONFIG_CMA
+		{
+			.id	= ION_CAMERA_HEAP_ID,
+			.type	= ION_HEAP_TYPE_DMA,
+			.name	= ION_CAMERA_HEAP_NAME,
+			.size	= MSM_ION_CAMERA_SIZE,
+			.memory_type = ION_EBI_TYPE,
+			.extra_data = &co_ion_pdata,
+			.priv	= &ion_cma_heap_device.dev,
+		},
+#else
 		{
 			.id	= ION_CAMERA_HEAP_ID,
 			.type	= ION_HEAP_TYPE_CARVEOUT,
@@ -4545,6 +4582,7 @@ struct ion_platform_heap msm8x60_heaps [] = {
 			.memory_type = ION_EBI_TYPE,
 			.extra_data = &co_ion_pdata,
 		},
+#endif
 		{
 			.id     = ION_CP_WB_HEAP_ID,
 			.type   = ION_HEAP_TYPE_CP,
@@ -4642,8 +4680,16 @@ static void __init reserve_ion_memory(void)
 		}
 	}
 
+#ifdef CONFIG_CMA
+	dma_declare_contiguous(
+		&ion_cma_heap_device.dev,
+		msm_ion_sf_size + MSM_ION_CAMERA_SIZE,
+		0,
+		0);
+#else
 	msm8x60_reserve_table[MEMTYPE_EBI1].size += msm_ion_sf_size;
 	msm8x60_reserve_table[MEMTYPE_EBI1].size += MSM_ION_CAMERA_SIZE;
+#endif
 	msm8x60_reserve_table[MEMTYPE_EBI1].size += MSM_ION_WB_SIZE;
 	msm8x60_reserve_table[MEMTYPE_EBI1].size += MSM_ION_AUDIO_SIZE;
 #ifdef CONFIG_QSEECOM
