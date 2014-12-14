@@ -1,553 +1,377 @@
-/* drivers/misc/pn544.c
- *
- * Copyright (C) 2012 Sony Mobile Communications AB.
+/*
+ * Copyright (C) 2010 Trusted Logic S.A.
  *
  * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2, as
- * published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ *
  */
 
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/err.h>
 #include <linux/fs.h>
 #include <linux/slab.h>
 #include <linux/init.h>
+#include <linux/list.h>
 #include <linux/i2c.h>
-#include <linux/wakelock.h>
+#include <linux/irq.h>
+#include <linux/jiffies.h>
 #include <linux/uaccess.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
+#include <linux/io.h>
 #include <linux/platform_device.h>
 #include <linux/gpio.h>
-#include <linux/types.h>
 #include <linux/miscdevice.h>
-#include <linux/poll.h>
-#include <linux/list.h>
-#include <linux/pn544.h>
+#include <linux/spinlock.h>
+#include <linux/nfc/pn544.h>
 
-#define PN544_WAKE_LOCK_TIMEOUT	(HZ * 5)
-#define MAX_FIRMDL_FRAME_SIZE	(3 + 512)
-#define MAX_NORMAL_FRAME_SIZE	(1 + 32)
+#define MAX_BUFFER_SIZE	512
 
-struct pn544_dev {
-	struct list_head		node;
-	wait_queue_head_t		wq;
-	struct wake_lock		wake_lock;
-	struct mutex			lock;
-	struct device			*dev;
-	struct i2c_client		*i2c_client;
-	struct pn544_i2c_platform_data	*pdata;
-	struct miscdevice		device;
-	enum pn544_state		state;
-	bool				busy;
-	bool				suspended;
-	u8				cmd[MAX_FIRMDL_FRAME_SIZE];
-	u8				res[MAX_FIRMDL_FRAME_SIZE];
-	u16				res_size;
-	u16				res_pos;
-	atomic_t			res_ready;
+struct pn544_dev	{
+	wait_queue_head_t	read_wq;
+	struct mutex		read_mutex;
+	struct i2c_client	*client;
+	struct miscdevice	pn544_device;
+	unsigned int 		ven_gpio;
+	unsigned int 		firm_gpio;
+	unsigned int		irq_gpio;
+	bool			irq_enabled;
+	spinlock_t		irq_enabled_lock;
 };
 
-static LIST_HEAD(dev_list);
-static DEFINE_MUTEX(list_lock);
-
-static void dump_buf(struct pn544_dev *d, u8 *buf, int size)
+static void pn544_disable_irq(struct pn544_dev *pn544_dev)
 {
-#ifdef DEBUG_DETAIL
-	if (d->state == PN544_STATE_ON) {
-		int i;
-		char s[MAX_NORMAL_FRAME_SIZE * 3];
-		int p = 0;
+	unsigned long flags;
 
-		for (i = 0; i < size; i++)
-			p += snprintf(s + p, sizeof(s) - p, "%02x ", buf[i]);
-		dev_dbg(d->dev, "%s\n", s);
+	spin_lock_irqsave(&pn544_dev->irq_enabled_lock, flags);
+	if (pn544_dev->irq_enabled) {
+		disable_irq_nosync(pn544_dev->client->irq);
+		pn544_dev->irq_enabled = false;
 	}
-#endif
+	spin_unlock_irqrestore(&pn544_dev->irq_enabled_lock, flags);
 }
 
-static struct pn544_dev *get_pn544_dev(struct inode *inode)
+static irqreturn_t pn544_dev_irq_handler(int irq, void *dev_id)
 {
-	int minor = iminor(inode);
-	struct pn544_dev *d;
+	struct pn544_dev *pn544_dev = dev_id;
 
-	mutex_lock(&list_lock);
-	list_for_each_entry(d, &dev_list, node) {
-		if (d->device.minor == minor)
-			goto found;
-	}
-	d = NULL;
-found:
-	mutex_unlock(&list_lock);
-	return d;
-}
+	pn544_disable_irq(pn544_dev);
 
-static int pn544_dev_update_frame(struct pn544_dev *d, size_t size)
-{
-	int ret = 0;
-	int len = 0;
-	int offset;
-	int maxlen;
-	int retry_count = 0;
-	bool fwdl;
+	/* Wake up waiting readers */
+	wake_up(&pn544_dev->read_wq);
 
-	atomic_set(&d->res_ready, 0);
-	memset(d->res, 0, MAX_FIRMDL_FRAME_SIZE);
-	d->res_size = 0;
-	d->res_pos = 0;
-	fwdl = d->state == PN544_STATE_FWDL;
-	offset = fwdl ? size : 1;
-	maxlen = fwdl ? MAX_FIRMDL_FRAME_SIZE : MAX_NORMAL_FRAME_SIZE;
-retry:
-	ret = i2c_master_recv(d->i2c_client, d->res, offset);
-	if (ret == -ENODEV || ret == -ENOTCONN) {
-		retry_count++;
-		if (retry_count > 5)
-			goto exit;
-		usleep_range(10000, 10000);
-		dev_err(d->dev, "%s: i2c read err %d, but retry %d\n",
-			__func__, ret, retry_count);
-		goto retry;
-	}
-
-	if (d->res[0] == (d->i2c_client->addr << 1 | 0x01)) {
-		dev_dbg(d->dev, "%s: i2c read slave addr, but wait irq\n",
-			__func__);
-		goto exit;
-	}
-
-	if (ret != offset) {
-		dev_err(d->dev, "%s: i2c read err %d\n", __func__, ret);
-		if (ret > 0)
-			ret = -EIO;
-		goto exit;
-	}
-
-	if (fwdl) {
-		dev_dbg(d->dev, "%s: i2c read only once in fwdl", __func__);
-		d->res_size = offset;
-		dump_buf(d, d->res, d->res_size);
-		goto exit;
-	}
-
-	len = d->res[0];
-	if (len == 0) {
-		dev_dbg(d->dev, "%s: parameters length zero\n", __func__);
-		d->res_size = offset;
-		dump_buf(d, d->res, d->res_size);
-		goto exit;
-	} else if (len > (maxlen - offset)) {
-		dev_err(d->dev, "%s: parameters too long %d\n", __func__, len);
-		ret = -EIO;
-		goto exit;
-	}
-
-	dev_dbg(d->dev, "%s: parameters length %d\n", __func__, len);
-	ret = i2c_master_recv(d->i2c_client, d->res + offset, len);
-	if (ret != len) {
-		dev_err(d->dev, "%s: i2c read err %d\n", __func__, ret);
-		if (ret > 0)
-			ret = -EIO;
-		goto exit;
-	}
-	d->res_size = len + offset;
-	dump_buf(d, d->res, d->res_size);
-exit:
-	return ret;
-}
-
-static int pn544_dev_read_frame(struct pn544_dev *d, char __user *buf,
-				size_t size)
-{
-	int ret = 0;
-	int len = 0;
-
-	len = d->res_size - d->res_pos;
-	if (len) {
-		len = len > size ? size : len;
-		ret = copy_to_user(buf, d->res + d->res_pos, len);
-		if (ret) {
-			dev_err(d->dev, "%s: copy_to_user err %d\n",
-				__func__, ret);
-			return -EFAULT;
-		}
-		d->res_pos += len;
-	}
-	dev_dbg(d->dev, "%s: %d bytes read\n", __func__, len);
-	dump_buf(d, d->res + d->res_pos - len, len);
-	if (d->res_size == d->res_pos) {
-		d->res_size = 0;
-		d->res_pos = 0;
-	}
-	return len;
-}
-
-static irqreturn_t pn544_dev_irq_handler(int irq, void *dev_info)
-{
-	struct pn544_dev *d = dev_info;
-
-	mutex_lock(&d->lock);
-	dev_dbg(d->dev, "%s: interruption\n", __func__);
-	if (d->suspended) {
-		dev_dbg(d->dev, "Interruption during suspend.\n");
-		wake_lock_timeout(&d->wake_lock, PN544_WAKE_LOCK_TIMEOUT);
-	}
-	atomic_set(&d->res_ready, 1);
-	wake_up_interruptible(&d->wq);
-	mutex_unlock(&d->lock);
 	return IRQ_HANDLED;
 }
 
-static ssize_t pn544_dev_read(struct file *file, char __user *buf,
-				size_t size, loff_t *pos)
+static ssize_t pn544_dev_read(struct file *filp, char __user *buf,
+		size_t count, loff_t *offset)
 {
-	struct pn544_dev *d = file->private_data;
-	int ret = 0;
+	struct pn544_dev *pn544_dev = filp->private_data;
+	char tmp[MAX_BUFFER_SIZE];
+	int ret;
 
-	mutex_lock(&d->lock);
-	if (!d->res_size) {
-		/* Read the data from chip */
-		ret = pn544_dev_update_frame(d, size);
-		if (IS_ERR_VALUE(ret)) {
-			dev_err(d->dev, "%s: update frame err %d\n",
-				__func__, ret);
-			goto exit;
+	if (count > MAX_BUFFER_SIZE)
+		count = MAX_BUFFER_SIZE;
+
+	pr_debug("%s : reading %zu bytes.\n", __func__, count);
+
+	mutex_lock(&pn544_dev->read_mutex);
+
+	if (!gpio_get_value(pn544_dev->irq_gpio)) {
+		if (filp->f_flags & O_NONBLOCK) {
+			ret = -EAGAIN;
+			goto fail;
+		}
+
+		while (1) {
+			pn544_dev->irq_enabled = true;
+			enable_irq(pn544_dev->client->irq);
+			ret = wait_event_interruptible(
+					pn544_dev->read_wq,
+					!pn544_dev->irq_enabled);
+
+			pn544_disable_irq(pn544_dev);
+
+			if (ret)
+				goto fail;
+
+			if (gpio_get_value(pn544_dev->irq_gpio))
+				break;
+
+			pr_warning("%s: spurious interrupt detected\n", __func__);
 		}
 	}
-	/* Read the data from buffer and copy data to user space */
-	ret = pn544_dev_read_frame(d, buf, size);
-	if (IS_ERR_VALUE(ret)) {
-		dev_err(d->dev, "%s: read frame err %d\n",
-			__func__, ret);
-		goto exit;
-	}
-	*pos += ret;
-exit:
-	mutex_unlock(&d->lock);
-	return ret;
-}
 
-unsigned int pn544_dev_poll(struct file *file, struct poll_table_struct *pt)
-{
-	struct pn544_dev *d = file->private_data;
-	int ret = 0;
+	/* Read data */
+	ret = i2c_master_recv(pn544_dev->client, tmp, count);
 
-	dev_dbg(d->dev, "%s: poll_wait enter\n", __func__);
-	if (d->res_size) {
-		ret = POLLIN | POLLRDNORM;
-	} else {
-		poll_wait(file, &d->wq, pt);
-		if (atomic_read(&d->res_ready))
-			ret = POLLIN | POLLRDNORM;
-	}
-	dev_dbg(d->dev, "%s: poll_wait exit %x\n", __func__, ret);
-	return ret;
-}
+	mutex_unlock(&pn544_dev->read_mutex);
 
-static ssize_t pn544_dev_write(struct file *file, const char __user *buf,
-				size_t size, loff_t *pos)
-{
-	struct pn544_dev *d = file->private_data;
-	int ret = 0;
-	int maxlen;
-	int retry_count = 0;
-	bool fwdl;
-
-	mutex_lock(&d->lock);
-	fwdl = d->state == PN544_STATE_FWDL;
-	maxlen = fwdl ? MAX_FIRMDL_FRAME_SIZE : MAX_NORMAL_FRAME_SIZE;
-	if (!size)
-		goto exit;
-	else if (size > maxlen)
-		size = maxlen;
-	ret = copy_from_user(d->cmd, buf, size);
-	if (ret) {
-		dev_err(d->dev, "%s: copy_to_user err %d\n", __func__, ret);
-		goto exit;
-	}
-retry:
-	ret = i2c_master_send(d->i2c_client, d->cmd, size);
-	if (ret == -ENODEV || ret == -ENOTCONN) {
-		retry_count++;
-		if (retry_count > 5)
-			goto exit;
-		usleep_range(10000, 10000);
-		dev_err(d->dev, "%s: i2c write err %d, but retry %d\n",
-			__func__, ret, retry_count);
-		goto retry;
-	}
+	/* pn544 seems to be slow in handling I2C read requests
+	 * so add 1ms delay after recv operation */
+	udelay(1000);
 
 	if (ret < 0) {
-		dev_err(d->dev, "%s: i2c err %d\n", __func__, ret);
-		goto exit;
+		pr_err("%s: i2c_master_recv returned %d\n", __func__, ret);
+		return ret;
 	}
-	*pos += ret;
-	dev_dbg(d->dev, "%s: %d bytes write\n", __func__, ret);
-	dump_buf(d, d->cmd, ret);
-exit:
-	mutex_unlock(&d->lock);
+	if (ret > count) {
+		pr_err("%s: received too many bytes from i2c (%d)\n",
+			__func__, ret);
+		return -EIO;
+	}
+	if (copy_to_user(buf, tmp, ret)) {
+		pr_warning("%s : failed to copy to user space\n", __func__);
+		return -EFAULT;
+	}
+	return ret;
+
+fail:
+	mutex_unlock(&pn544_dev->read_mutex);
 	return ret;
 }
 
-static int pn544_dev_open(struct inode *inode, struct file *file)
+static ssize_t pn544_dev_write(struct file *filp, const char __user *buf,
+		size_t count, loff_t *offset)
 {
-	struct pn544_dev *d = get_pn544_dev(inode);
-	int ret = 0;
+	struct pn544_dev  *pn544_dev;
+	char tmp[MAX_BUFFER_SIZE];
+	int ret;
 
-	if (!d)
-		return -ENODEV;
+	pn544_dev = filp->private_data;
 
-	mutex_lock(&d->lock);
-	if (d->busy) {
-		ret = -EBUSY;
-		dev_err(d->dev, "%s: only one client supported\n", __func__);
-	} else {
-		if (d->pdata->driver_opened) {
-			ret = d->pdata->driver_opened();
-			if (IS_ERR_VALUE(ret)) {
-				dev_err(d->dev, "%s: cannot open driver\n",
-					__func__);
-				mutex_unlock(&d->lock);
-				return ret;
-			}
-		}
-		d->busy = true;
-		file->private_data = d;
+	if (count > MAX_BUFFER_SIZE)
+		count = MAX_BUFFER_SIZE;
+
+	if (copy_from_user(tmp, buf, count)) {
+		pr_err("%s : failed to copy from user space\n", __func__);
+		return -EFAULT;
 	}
-	mutex_unlock(&d->lock);
+
+	pr_debug("%s : writing %zu bytes.\n", __func__, count);
+	/* Write data */
+	ret = i2c_master_send(pn544_dev->client, tmp, count);
+	if (ret != count) {
+		pr_err("%s : i2c_master_send returned %d\n", __func__, ret);
+		ret = -EIO;
+	}
+
+	/* pn544 seems to be slow in handling I2C write requests
+	 * so add 1ms delay after I2C send oparation */
+	udelay(1000);
+
 	return ret;
 }
 
-static int pn544_dev_release(struct inode *inode, struct file *file)
+static int pn544_dev_open(struct inode *inode, struct file *filp)
 {
-	struct pn544_dev *d = file->private_data;
+	struct pn544_dev *pn544_dev = container_of(filp->private_data,
+						struct pn544_dev,
+						pn544_device);
 
-	mutex_lock(&d->lock);
-	if (atomic_read(&d->res_ready))
-		dev_dbg(d->dev, "%s: interruption is ignored\n", __func__);
-	if (d->pdata->driver_closed)
-		d->pdata->driver_closed();
-	atomic_set(&d->res_ready, 0);
-	memset(d->res, 0, MAX_FIRMDL_FRAME_SIZE);
-	d->res_size = 0;
-	d->res_pos = 0;
-	d->busy = false;
-	mutex_unlock(&d->lock);
+	filp->private_data = pn544_dev;
+
+	pr_debug("%s : %d,%d\n", __func__, imajor(inode), iminor(inode));
+
 	return 0;
 }
 
-static long pn544_dev_ioctl(struct file *file,
-			unsigned int cmd, unsigned long val)
+static long  pn544_dev_ioctl(struct file *filp, unsigned int cmd,
+				unsigned long arg)
 {
-	struct pn544_dev *d = file->private_data;
-	int ret = 0;
-	int state = 0;
+	struct pn544_dev *pn544_dev = filp->private_data;
 
-	mutex_lock(&d->lock);
-	dev_dbg(d->dev, "%s: cmd=%d val=%lu\n", __func__, cmd, val);
-	if (atomic_read(&d->res_ready))
-		dev_dbg(d->dev, "%s: interruption is ignored\n", __func__);
-
-	disable_irq(d->i2c_client->irq);
 	switch (cmd) {
 	case PN544_SET_PWR:
-		switch (val) {
-		case PN544_SET_PWR_OFF:
-			state = PN544_STATE_OFF;
-			break;
-		case PN544_SET_PWR_ON:
-			state = PN544_STATE_ON;
-			break;
-		case PN544_SET_PWR_FWDL:
-		default:
-			state = PN544_STATE_FWDL;
-			break;
-		}
-
-		ret = d->pdata->chip_config(state, (void *)d->dev);
-		if (IS_ERR_VALUE(ret)) {
-			dev_err(d->dev, "%s: chip config err %d\n",
-				__func__, ret);
-			goto exit;
-		}
-		dev_dbg(d->dev, "%s: state -> %d\n", __func__, state);
-		if (d->state != state) {
-			d->state = state;
-			atomic_set(&d->res_ready, 0);
-			memset(d->res, 0, MAX_FIRMDL_FRAME_SIZE);
-			d->res_size = 0;
-			d->res_pos = 0;
+		if (arg == 2) {
+			/* power on with firmware download (requires hw reset)
+			 */
+			pr_info("%s power on with firmware\n", __func__);
+			gpio_set_value(pn544_dev->ven_gpio, 1);
+			msleep(20);
+			if (pn544_dev->firm_gpio)
+				gpio_set_value(pn544_dev->firm_gpio, 1);
+			msleep(20);
+			gpio_set_value(pn544_dev->ven_gpio, 0);
+			msleep(100);
+			gpio_set_value(pn544_dev->ven_gpio, 1);
+			msleep(20);
+		} else if (arg == 1) {
+			/* power on */
+			pr_info("%s power on\n", __func__);
+			if (pn544_dev->firm_gpio)
+				gpio_set_value(pn544_dev->firm_gpio, 0);
+			gpio_set_value(pn544_dev->ven_gpio, 1);
+			msleep(100);
+		} else  if (arg == 0) {
+			/* power off */
+			pr_info("%s power off\n", __func__);
+			if (pn544_dev->firm_gpio)
+				gpio_set_value(pn544_dev->firm_gpio, 0);
+			gpio_set_value(pn544_dev->ven_gpio, 0);
+			msleep(100);
+		} else {
+			pr_err("%s bad arg %lu\n", __func__, arg);
+			return -EINVAL;
 		}
 		break;
 	default:
-		dev_err(d->dev, "%s: command %d not supported\n",
-			__func__, cmd);
-		ret = -EINVAL;
-		break;
+		pr_err("%s bad ioctl %u\n", __func__, cmd);
+		return -EINVAL;
 	}
-exit:
-	enable_irq(d->i2c_client->irq);
-	mutex_unlock(&d->lock);
-	return ret;
+
+	return 0;
 }
 
-static const struct file_operations pn544_fops = {
-	.owner		= THIS_MODULE,
-	.llseek		= no_llseek,
-	.read		= pn544_dev_read,
-	.write		= pn544_dev_write,
-	.open		= pn544_dev_open,
-	.release	= pn544_dev_release,
-	.unlocked_ioctl	= pn544_dev_ioctl,
-	.poll		= pn544_dev_poll,
+static const struct file_operations pn544_dev_fops = {
+	.owner	= THIS_MODULE,
+	.llseek	= no_llseek,
+	.read	= pn544_dev_read,
+	.write	= pn544_dev_write,
+	.open	= pn544_dev_open,
+	.unlocked_ioctl  = pn544_dev_ioctl,
 };
 
 static int pn544_probe(struct i2c_client *client,
-			const struct i2c_device_id *id)
+		const struct i2c_device_id *id)
 {
-	struct pn544_dev *dev;
-	struct pn544_i2c_platform_data *pdata = client->dev.platform_data;
-	int ret = 0;
+	int ret;
+	struct pn544_i2c_platform_data *platform_data;
+	struct pn544_dev *pn544_dev;
 
-	dev_dbg(&client->dev, "%s:\n", __func__);
-	if (!pdata || !pdata->chip_config || !pdata->driver_loaded ||
-		!pdata->driver_unloaded) {
-		dev_err(&client->dev, "%s: no platform data found\n", __func__);
-		ret = -EINVAL;
-		goto probe_pdata;
+	platform_data = client->dev.platform_data;
+
+	if (platform_data == NULL) {
+		pr_err("%s : nfc probe fail\n", __func__);
+		return  -ENODEV;
 	}
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
-		dev_err(&client->dev, "%s: i2c check failed\n", __func__);
-		ret = -ENODEV;
-		goto probe_i2c;
+		pr_err("%s : need I2C_FUNC_I2C\n", __func__);
+		return  -ENODEV;
 	}
 
-	ret = pdata->driver_loaded();
-	if (IS_ERR_VALUE(ret))
-		goto probe_loaded;
+	ret = gpio_request(platform_data->irq_gpio, "nfc_int");
+	if (ret)
+		return  -ENODEV;
+	ret = gpio_request(platform_data->ven_gpio, "nfc_ven");
+	if (ret)
+		goto err_ven;
+	if (platform_data->firm_gpio) {
+		ret = gpio_request(platform_data->firm_gpio, "nfc_firm");
+		if (ret)
+			goto err_firm;
+	}
 
-	dev = kzalloc(sizeof(struct pn544_dev), GFP_KERNEL);
-	if (!dev) {
-		dev_err(&client->dev, "%s: no memory\n", __func__);
+	pn544_dev = kzalloc(sizeof(*pn544_dev), GFP_KERNEL);
+	if (pn544_dev == NULL) {
+		dev_err(&client->dev,
+				"failed to allocate memory for module data\n");
 		ret = -ENOMEM;
-		goto probe_mem;
-	}
-	dev->i2c_client = client;
-	dev->dev = &client->dev;
-	dev->pdata = pdata;
-	init_waitqueue_head(&dev->wq);
-	wake_lock_init(&dev->wake_lock, WAKE_LOCK_SUSPEND, "pn544");
-	mutex_init(&dev->lock);
-	i2c_set_clientdata(client, dev);
-	dev->state = PN544_STATE_UNKNOWN;
-
-	ret = request_threaded_irq(client->irq, NULL, pn544_dev_irq_handler,
-			pdata->irq_type, client->name, dev);
-	if (IS_ERR_VALUE(ret)) {
-		dev_err(&client->dev, "%s: irq request err %d\n",
-			__func__, ret);
-		goto probe_irq;
+		goto err_exit;
 	}
 
-	dev->device.minor = MISC_DYNAMIC_MINOR;
-	dev->device.name = PN544_DEVICE_NAME;
-	dev->device.fops = &pn544_fops;
-	mutex_lock(&list_lock);
-	list_add_tail(&dev->node, &dev_list);
-	mutex_unlock(&list_lock);
-	ret = misc_register(&dev->device);
-	if (IS_ERR_VALUE(ret)) {
-		dev_err(&client->dev, "%s: misc_register err %d\n",
-			__func__, ret);
-		goto probe_misc;
-	}
-	return ret;
+	pn544_dev->irq_gpio = platform_data->irq_gpio;
+	pn544_dev->ven_gpio  = platform_data->ven_gpio;
+	pn544_dev->firm_gpio  = platform_data->firm_gpio;
+	pn544_dev->client   = client;
 
-probe_misc:
-	mutex_lock(&list_lock);
-	list_del(&dev->node);
-	mutex_unlock(&list_lock);
-	free_irq(client->irq, dev);
-probe_irq:
-	i2c_set_clientdata(client, NULL);
-	kfree(dev);
-probe_mem:
-	pdata->driver_unloaded();
-probe_loaded:
-probe_i2c:
-probe_pdata:
-	dev_err(&client->dev, "%s: err %d\n", __func__, ret);
+	ret = gpio_direction_input(pn544_dev->irq_gpio);
+	if (ret < 0) {
+		pr_err("%s :not able to set irq_gpio as input\n", __func__);
+		goto err_ven;
+	}
+	ret = gpio_direction_output(pn544_dev->ven_gpio, 0);
+	if (ret < 0) {
+		pr_err("%s : not able to set ven_gpio as output\n", __func__);
+		goto err_firm;
+	}
+	if (platform_data->firm_gpio) {
+		ret = gpio_direction_output(pn544_dev->firm_gpio, 0);
+		if (ret < 0) {
+			pr_err("%s : not able to set firm_gpio as output\n",
+				 __func__);
+			goto err_exit;
+		}
+	}
+
+	/* init mutex and queues */
+	init_waitqueue_head(&pn544_dev->read_wq);
+	mutex_init(&pn544_dev->read_mutex);
+	spin_lock_init(&pn544_dev->irq_enabled_lock);
+
+	pn544_dev->pn544_device.minor = MISC_DYNAMIC_MINOR;
+	pn544_dev->pn544_device.name = "pn544";
+	pn544_dev->pn544_device.fops = &pn544_dev_fops;
+
+	ret = misc_register(&pn544_dev->pn544_device);
+	if (ret) {
+		pr_err("%s : misc_register failed\n", __FILE__);
+		goto err_misc_register;
+	}
+
+	/* request irq.  the irq is set whenever the chip has data available
+	 * for reading.  it is cleared when all data has been read.
+	 */
+	pr_info("%s : requesting IRQ %d\n", __func__, client->irq);
+	pn544_dev->irq_enabled = true;
+	ret = request_irq(client->irq, pn544_dev_irq_handler,
+			  IRQF_TRIGGER_HIGH, client->name, pn544_dev);
+	if (ret) {
+		dev_err(&client->dev, "request_irq failed\n");
+		goto err_request_irq_failed;
+	}
+	pn544_disable_irq(pn544_dev);
+	i2c_set_clientdata(client, pn544_dev);
+
+	return 0;
+
+err_request_irq_failed:
+	misc_deregister(&pn544_dev->pn544_device);
+err_misc_register:
+	mutex_destroy(&pn544_dev->read_mutex);
+	kfree(pn544_dev);
+err_exit:
+	if (pn544_dev->firm_gpio)
+		gpio_free(platform_data->firm_gpio);
+err_firm:
+	gpio_free(platform_data->ven_gpio);
+err_ven:
+	gpio_free(platform_data->irq_gpio);
 	return ret;
 }
 
 static int pn544_remove(struct i2c_client *client)
 {
-	struct pn544_dev *dev = i2c_get_clientdata(client);
+	struct pn544_dev *pn544_dev;
 
-	free_irq(client->irq, dev);
-	misc_deregister(&dev->device);
-	mutex_lock(&list_lock);
-	list_del(&dev->node);
-	mutex_unlock(&list_lock);
-	i2c_set_clientdata(client, NULL);
-	dev->pdata->driver_unloaded();
-	mutex_destroy(&dev->lock);
-	kfree(dev);
-	return 0;
-}
+	pn544_dev = i2c_get_clientdata(client);
+	free_irq(client->irq, pn544_dev);
+	misc_deregister(&pn544_dev->pn544_device);
+	mutex_destroy(&pn544_dev->read_mutex);
+	gpio_free(pn544_dev->irq_gpio);
+	gpio_free(pn544_dev->ven_gpio);
+	if (pn544_dev->firm_gpio)
+		gpio_free(pn544_dev->firm_gpio);
+	kfree(pn544_dev);
 
-static int pn544_pm_suspend(struct device *dev)
-{
-	int ret;
-	struct pn544_dev *d = dev_get_drvdata(dev);
-
-	dev_dbg(d->dev, "%s:\n", __func__);
-	if (!mutex_trylock(&d->lock))
-		return -EAGAIN;
-	if (d->busy) {
-		if (atomic_read(&d->res_ready) || d->res_size) {
-			wake_lock_timeout(&d->wake_lock,
-				PN544_WAKE_LOCK_TIMEOUT);
-			mutex_unlock(&d->lock);
-			return -EAGAIN;
-		}
-		ret = irq_set_irq_wake(d->i2c_client->irq, 1);
-		if (IS_ERR_VALUE(ret))
-			dev_err(dev, "%s: irq wake err %d\n", __func__, ret);
-	}
-	d->suspended = true;
-	mutex_unlock(&d->lock);
-	return 0;
-}
-
-static int pn544_pm_resume(struct device *dev)
-{
-	struct pn544_dev *d = dev_get_drvdata(dev);
-	int ret;
-
-	dev_dbg(d->dev, "%s:\n", __func__);
-	mutex_lock(&d->lock);
-	if (d->busy) {
-		ret = irq_set_irq_wake(d->i2c_client->irq, 0);
-		if (IS_ERR_VALUE(ret))
-			dev_err(dev, "%s: irq wake err %d\n", __func__, ret);
-	}
-	d->suspended = false;
-	mutex_unlock(&d->lock);
 	return 0;
 }
 
 static const struct i2c_device_id pn544_id[] = {
-	{ PN544_DEVICE_NAME, 0 },
-	{ },
-};
-
-static const struct dev_pm_ops pn544_pm_ops = {
-	.suspend	= pn544_pm_suspend,
-	.resume		= pn544_pm_resume,
+	{ "pn544", 0 },
+	{ }
 };
 
 static struct i2c_driver pn544_driver = {
@@ -556,23 +380,29 @@ static struct i2c_driver pn544_driver = {
 	.remove		= pn544_remove,
 	.driver		= {
 		.owner	= THIS_MODULE,
-		.name	= PN544_DEVICE_NAME,
-		.pm	= &pn544_pm_ops,
+		.name	= "pn544",
 	},
 };
 
+/*
+ * module load/unload record keeping
+ */
+
 static int __init pn544_dev_init(void)
 {
+	pr_info("Loading pn544 driver\n");
 	return i2c_add_driver(&pn544_driver);
 }
+module_init(pn544_dev_init);
 
 static void __exit pn544_dev_exit(void)
 {
+	pr_info("Unloading pn544 driver\n");
 	i2c_del_driver(&pn544_driver);
 }
-
-module_init(pn544_dev_init);
 module_exit(pn544_dev_exit);
 
+MODULE_AUTHOR("Sylvain Fonteneau");
 MODULE_DESCRIPTION("NFC PN544 driver");
-MODULE_LICENSE("GPL v2");
+MODULE_LICENSE("GPL");
+
