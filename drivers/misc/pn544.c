@@ -34,7 +34,7 @@
 #include <linux/gpio.h>
 #include <linux/miscdevice.h>
 #include <linux/spinlock.h>
-#include <linux/nfc/pn544.h>
+#include <linux/pn544.h>
 
 #define MAX_BUFFER_SIZE	512
 
