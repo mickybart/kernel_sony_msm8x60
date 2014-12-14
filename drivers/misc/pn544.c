@@ -80,6 +80,7 @@ static ssize_t pn544_dev_read(struct file *filp, char __user *buf,
 	struct pn544_dev *pn544_dev = filp->private_data;
 	char tmp[MAX_BUFFER_SIZE];
 	int ret;
+	int retry_count = 0;
 
 	if (count > MAX_BUFFER_SIZE)
 		count = MAX_BUFFER_SIZE;
@@ -114,13 +115,17 @@ static ssize_t pn544_dev_read(struct file *filp, char __user *buf,
 	}
 
 	/* Read data */
-	ret = i2c_master_recv(pn544_dev->client, tmp, count);
+	while (1) {
+		ret = i2c_master_recv(pn544_dev->client, tmp, count);
+		if (ret != -ENODEV && ret != -ENOTCONN)
+			break;
+		retry_count++;
+		if (retry_count > 5)
+			break;
+		usleep_range(10000, 10000);
+	}
 
 	mutex_unlock(&pn544_dev->read_mutex);
-
-	/* pn544 seems to be slow in handling I2C read requests
-	 * so add 1ms delay after recv operation */
-	udelay(1000);
 
 	if (ret < 0) {
 		pr_err("%s: i2c_master_recv returned %d\n", __func__, ret);
@@ -148,6 +153,7 @@ static ssize_t pn544_dev_write(struct file *filp, const char __user *buf,
 	struct pn544_dev  *pn544_dev;
 	char tmp[MAX_BUFFER_SIZE];
 	int ret;
+	int retry_count = 0;
 
 	pn544_dev = filp->private_data;
 
@@ -161,15 +167,20 @@ static ssize_t pn544_dev_write(struct file *filp, const char __user *buf,
 
 	pr_debug("%s : writing %zu bytes.\n", __func__, count);
 	/* Write data */
-	ret = i2c_master_send(pn544_dev->client, tmp, count);
+	while (1) {
+		ret = i2c_master_send(pn544_dev->client, tmp, count);
+		if (ret != -ENODEV && ret != -ENOTCONN)
+			break;
+		retry_count++;
+		if (retry_count > 5)
+			break;
+		usleep_range(10000, 10000);
+	}
+
 	if (ret != count) {
 		pr_err("%s : i2c_master_send returned %d\n", __func__, ret);
 		ret = -EIO;
 	}
-
-	/* pn544 seems to be slow in handling I2C write requests
-	 * so add 1ms delay after I2C send oparation */
-	udelay(1000);
 
 	return ret;
 }
