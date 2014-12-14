@@ -46,6 +46,8 @@ struct pn544_dev	{
 	unsigned int 		ven_gpio;
 	unsigned int 		firm_gpio;
 	unsigned int		irq_gpio;
+	int		          (*vreg_enable)(void);
+	void	          (*vreg_disable)(void);
 	bool			irq_enabled;
 	spinlock_t		irq_enabled_lock;
 };
@@ -194,6 +196,24 @@ static int pn544_dev_open(struct inode *inode, struct file *filp)
 	filp->private_data = pn544_dev;
 
 	pr_debug("%s : %d,%d\n", __func__, imajor(inode), iminor(inode));
+	
+	if (pn544_dev->vreg_enable) {
+		int ret = pn544_dev->vreg_enable();
+		if (ret < 0) {
+			pr_err("%s: cannot open driver\n",	__func__);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
+static int pn544_dev_release(struct inode *inode, struct file *file)
+{
+	struct pn544_dev *pn544_dev = file->private_data;
+
+	if (pn544_dev->vreg_disable)
+		pn544_dev->vreg_disable();
 
 	return 0;
 }
@@ -251,6 +271,7 @@ static const struct file_operations pn544_dev_fops = {
 	.read	= pn544_dev_read,
 	.write	= pn544_dev_write,
 	.open	= pn544_dev_open,
+	.release	= pn544_dev_release,
 	.unlocked_ioctl  = pn544_dev_ioctl,
 };
 
@@ -271,6 +292,12 @@ static int pn544_probe(struct i2c_client *client,
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		pr_err("%s : need I2C_FUNC_I2C\n", __func__);
 		return  -ENODEV;
+	}
+
+	if (platform_data->vreg_init) {
+		ret = platform_data->vreg_init();
+		if (ret < 0)
+			return -ENODEV;
 	}
 
 	ret = gpio_request(platform_data->irq_gpio, "nfc_int");
@@ -296,6 +323,8 @@ static int pn544_probe(struct i2c_client *client,
 	pn544_dev->irq_gpio = platform_data->irq_gpio;
 	pn544_dev->ven_gpio  = platform_data->ven_gpio;
 	pn544_dev->firm_gpio  = platform_data->firm_gpio;
+	pn544_dev->vreg_enable = platform_data->vreg_enable;
+	pn544_dev->vreg_disable = platform_data->vreg_disable;
 	pn544_dev->client   = client;
 
 	ret = gpio_direction_input(pn544_dev->irq_gpio);
