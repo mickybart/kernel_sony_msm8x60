@@ -155,7 +155,6 @@
 
 #ifdef CONFIG_NFC_PN544
 #include <linux/pn544.h>
-#include "nfc-fuji.h"
 #endif
 
 #ifdef CONFIG_SEMC_FELICA_SUPPORT
@@ -2919,71 +2918,74 @@ static struct clearpad_platform_data clearpad_platform_data = {
 };
 
 #ifdef CONFIG_NFC_PN544
-int pn544_chip_config(enum pn544_state state, void *not_used)
+#if defined(CONFIG_MACH_SEMC_NOZOMI) || defined(CONFIG_MACH_SEMC_NOZOMI2)
+static int pn544_pm8xxx_config(unsigned int flag, int enable)
 {
-	switch (state) {
-	case PN544_STATE_OFF:
-		gpio_set_value_cansleep(
-			PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_NFC_FWDL_EN - 1), 0);
-		gpio_set_value_cansleep(
-			PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_NFC_EN - 1), 0);
-		usleep(50000);
-		break;
-	case PN544_STATE_ON:
-		gpio_set_value_cansleep(
-			PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_NFC_FWDL_EN - 1), 0);
-		gpio_set_value_cansleep(
-			PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_NFC_EN - 1), 1);
-		usleep(10000);
-		break;
-	case PN544_STATE_FWDL:
-		gpio_set_value_cansleep(
-			PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_NFC_FWDL_EN - 1), 1);
-		gpio_set_value_cansleep(
-			PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_NFC_EN - 1), 0);
-		usleep(10000);
-		gpio_set_value_cansleep(
-			PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_NFC_EN - 1), 1);
-		break;
-	default:
-		pr_err("%s: undefined state %d\n", __func__, state);
-		return -EINVAL;
+	int ret = 0;
+	unsigned int status = 0;
+	struct pm8xxx_nfc_device *pmic_nfc;
+
+	pmic_nfc = pm8xxx_nfc_request();
+	if (!pmic_nfc) {
+		pr_err("%s: cannot open pmic-nfc\n", __func__);
+		return -ENODEV;
 	}
-	return 0;
-}
 
-int pn544_gpio_request(void)
-{
-	int ret;
+	ret = pm8xxx_nfc_get_status(pmic_nfc, PM_NFC_CTRL_REQ, &status);
+	if (ret < 0) {
+		pr_err("%s: cannot get status from pmic\n", __func__);
+		return ret;
+	}
 
-	ret = gpio_request(
-		PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_NFC_IRQ - 1), "pn544_irq");
-	if (ret)
-		goto err_irq;
-	ret = gpio_request(
-		PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_NFC_EN - 1), "pn544_ven");
-	if (ret)
-		goto err_ven;
-	ret = gpio_request(
-		PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_NFC_FWDL_EN - 1), "pn544_fw");
-	if (ret)
-		goto err_fw;
-	return 0;
-err_fw:
-	gpio_free(PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_NFC_EN - 1));
-err_ven:
-	gpio_free(PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_NFC_IRQ - 1));
-err_irq:
-	pr_err("%s: gpio request err %d\n", __func__, ret);
+	if (enable)
+		status |= flag;
+	else
+		status &= ~flag;
+
+	ret = pm8xxx_nfc_config(pmic_nfc, PM_NFC_CTRL_REQ, status);
+	if (ret < 0)
+		pr_err("%s: cannot set status to pmic\n", __func__);
+
 	return ret;
 }
 
-void pn544_gpio_release(void)
+static int pn544_vreg_init(void)
 {
-	gpio_free(PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_NFC_EN - 1));
-	gpio_free(PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_NFC_IRQ - 1));
-	gpio_free(PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_NFC_FWDL_EN - 1));
+	int ret;
+
+	ret = pn544_pm8xxx_config(PM_NFC_VDDLDO_MON_LEVEL |
+			PM_NFC_VPH_PWR_EN | PM_NFC_EXT_VDDLDO_EN, false);
+	if (ret < 0)
+	    return ret;
+
+	return pn544_pm8xxx_config(PM_NFC_SUPPORT_EN | PM_NFC_EN, true);
 }
+
+int pn544_vreg_enable(void)
+{
+	return pn544_pm8xxx_config(PM_NFC_LDO_EN, true);
+}
+
+void pn544_vreg_disable(void)
+{
+	pn544_pm8xxx_config(PM_NFC_LDO_EN, false);
+}
+
+static struct pn544_i2c_platform_data pn544_pdata = {
+	.irq_gpio = PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_NFC_IRQ - 1),
+	.ven_gpio = PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_NFC_EN - 1),
+	.firm_gpio = PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_NFC_FWDL_EN - 1),
+	.vreg_init = pn544_vreg_init,
+	.vreg_enable = pn544_vreg_enable,
+	.vreg_disable = pn544_vreg_disable,
+};
+#else
+static struct pn544_i2c_platform_data pn544_pdata = {
+	.irq_gpio = PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_NFC_IRQ - 1),
+	.ven_gpio = PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_NFC_EN - 1),
+	.firm_gpio = PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_NFC_FWDL_EN - 1),
+};
+#endif
 #endif
 
 static struct i2c_board_info gsbi3_peripherals_info[] __initdata = {
@@ -3308,7 +3310,7 @@ static struct i2c_board_info fuji_gsbi8_peripherals_info[] __initdata = {
 	},
 #ifdef CONFIG_NFC_PN544
 	{
-		I2C_BOARD_INFO(PN544_DEVICE_NAME, 0x50 >> 1),
+		I2C_BOARD_INFO("pn544", 0x50 >> 1),
 		.irq = PM8058_GPIO_IRQ(PM8058_IRQ_BASE, PMIC_GPIO_NFC_IRQ - 1),
 		.platform_data = &pn544_pdata,
 	},
