@@ -717,7 +717,11 @@ int ion_map_iommu(struct ion_client *client, struct ion_handle *handle,
 	if (!iommu_map) {
 		iommu_map = __ion_iommu_map(buffer, domain_num, partition_num,
 					    align, iova_length, flags, iova);
-		if (!IS_ERR_OR_NULL(iommu_map)) {
+		if (!iommu_map) {
+			ret = -ENOMEM;
+		} else if (IS_ERR(iommu_map)) {
+			ret = PTR_ERR(iommu_map);
+		} else {
 			iommu_map->flags = iommu_flags;
 
 			if (iommu_map->flags & ION_IOMMU_UNMAP_DELAYED)
