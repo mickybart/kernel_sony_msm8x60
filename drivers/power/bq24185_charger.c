@@ -581,10 +581,11 @@ static void bq24185_update_power_supply(struct bq24185_data *bd)
 static irqreturn_t bq24185_thread_irq(int irq, void *data)
 {
 	struct bq24185_data *bd = data;
-	struct bq24185_status_data old_status = bd->cached_status;
+	struct bq24185_status_data old_status;
 
 	dev_dbg(&bd->clientp->dev, "Receiving threaded interrupt\n");
 
+    old_status = bd->cached_status;
 	if (!bq24185_check_status(bd) &&
 	    memcmp(&bd->cached_status, &old_status, sizeof bd->cached_status)) {
 		dev_info(&bd->clientp->dev, "Charger status: %d\n",
@@ -598,6 +599,7 @@ static irqreturn_t bq24185_thread_irq(int irq, void *data)
 	 */
 	msleep(300);
 
+    old_status = bd->cached_status;
 	if (!bq24185_check_status(bd) &&
 	    memcmp(&bd->cached_status, &old_status, sizeof bd->cached_status)) {
 		dev_info(&bd->clientp->dev, "Charger status: %d\n",
