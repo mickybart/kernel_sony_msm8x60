@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -44,6 +44,7 @@ static LIST_HEAD(blk_dev_test_list);
 static struct test_data *ptd;
 
 
+
 /**
  * test_iosched_get_req_queue() - returns the request queue
  * served by the scheduler
@@ -75,20 +76,17 @@ void test_iosched_mark_test_completion(void)
 }
 EXPORT_SYMBOL(test_iosched_mark_test_completion);
 
-/**
- *  check_test_completion() - Check if all the queued test
- *  requests were completed
- */
-void check_test_completion(void)
+/* Check if all the queued test requests were completed */
+static void check_test_completion(void)
 {
 	struct test_request *test_rq;
 
 	if (!ptd)
-		goto exit;
+		return;
 
 	list_for_each_entry(test_rq, &ptd->dispatched_queue, queuelist)
 		if (!test_rq->req_completed)
-			goto exit;
+			return;
 
 	if (!list_empty(&ptd->test_queue)
 			|| !list_empty(&ptd->reinsert_queue)
@@ -98,11 +96,8 @@ void check_test_completion(void)
 			     __func__, ptd->test_count, ptd->reinsert_count);
 		test_pr_info("%s: dispatched_count=%d, urgent_count=%d",
 			    __func__, ptd->dispatched_count, ptd->urgent_count);
-		goto exit;
+		return;
 	}
-
-	ptd->test_info.test_duration = jiffies -
-				ptd->test_info.test_duration;
 
 	test_pr_info("%s: Test is completed, test_count=%d, reinsert_count=%d,",
 			__func__, ptd->test_count, ptd->reinsert_count);
@@ -110,11 +105,7 @@ void check_test_completion(void)
 		      __func__, ptd->dispatched_count);
 
 	test_iosched_mark_test_completion();
-
-exit:
-	return;
 }
-EXPORT_SYMBOL(check_test_completion);
 
 /*
  * A callback to be called per bio completion.
@@ -139,7 +130,7 @@ static void end_test_req(struct request *rq, int err)
 	test_rq = (struct test_request *)rq->elv.priv[0];
 	BUG_ON(!test_rq);
 
-	test_pr_debug("%s: request %d completed, err=%d",
+	test_pr_info("%s: request %d completed, err=%d",
 	       __func__, test_rq->req_id, err);
 
 	test_rq->req_completed = true;
@@ -354,7 +345,7 @@ struct test_request *test_iosched_create_test_req(int is_err_expcted,
 		rq->end_io = end_test_req;
 	rq->__sector = start_sec;
 	rq->cmd_type |= REQ_TYPE_FS;
-	rq->cmd_flags |= REQ_SORTED;
+	rq->cmd_flags |= REQ_SORTED; /* do we need this?*/
 
 	if (rq->bio) {
 		rq->bio->bi_sector = start_sec;
@@ -690,8 +681,6 @@ static unsigned int get_timeout_msec(struct test_data *td)
 
 /**
  * test_iosched_start_test() - Prepares and runs the test.
- * The members test_duration and test_byte_count of the input
- * parameter t_info are modified by this function.
  * @t_info:	the current test testcase and callbacks
  *		functions
  *
@@ -765,7 +754,7 @@ int test_iosched_start_test(struct test_info *t_info)
 			test_name = ptd->test_info.get_test_case_str_fn(ptd);
 		else
 			test_name = "Unknown testcase";
-		test_pr_info("%s: Starting test %s", __func__, test_name);
+		test_pr_info("%s: Starting test %s\n", __func__, test_name);
 
 		ret = prepare_test(ptd);
 		if (ret) {
@@ -774,7 +763,6 @@ int test_iosched_start_test(struct test_info *t_info)
 			goto error;
 		}
 
-		ptd->test_info.test_duration = jiffies;
 		ret = run_test(ptd);
 		if (ret) {
 			test_pr_err("%s: failed to run the test\n", __func__);
@@ -784,8 +772,6 @@ int test_iosched_start_test(struct test_info *t_info)
 		test_pr_info("%s: Waiting for the test completion", __func__);
 
 		wait_event(ptd->wait_q, ptd->test_state == TEST_COMPLETED);
-		t_info->test_duration = ptd->test_info.test_duration;
-		t_info->test_byte_count = ptd->test_info.test_byte_count;
 		del_timer_sync(&ptd->timeout_timer);
 
 		ret = check_test_result(ptd);
@@ -1020,7 +1006,6 @@ static int test_dispatch_from(struct request_queue *q,
 
 		print_req(rq);
 		elv_dispatch_sort(q, rq);
-		ptd->test_info.test_byte_count += test_rq->buf_size;
 		ret = 1;
 		goto err;
 	}
