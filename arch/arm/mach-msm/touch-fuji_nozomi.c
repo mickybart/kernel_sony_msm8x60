@@ -44,6 +44,10 @@ struct synaptics_funcarea clearpad_funcarea_array[] = {
 		{ 500, 1315, 719, 1327 }, { 480, 1280, 719, 1327 },
 		SYN_FUNCAREA_BUTTON, &synaptics_app_switch_key
 	},
+	{
+		{ 240, 460, 479, 819 }, { 240, 460, 479, 819 },
+		SYN_FUNCAREA_WAKEUP, NULL
+	},
 	{ .func = SYN_FUNCAREA_END }
 };
 
