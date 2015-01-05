@@ -103,6 +103,9 @@
 #define CHK_MASK(mask, data) ((data) & (mask))
 #define DATA_MASK(mask, data) ((data) << (ffs(mask) - 1))
 
+#define USB_CHG  0x01
+#define WALL_CHG 0x02
+
 #ifdef DEBUG
 #define MUTEX_LOCK(x) do {						\
 	struct bq24185_data *_b = container_of(x, struct bq24185_data, lock);\
@@ -185,6 +188,9 @@ struct bq24185_data {
 	enum bq24185_opa_mode mode;
 	u8 vindpm_usb_compliant;
 	u8 vindpm_non_compliant;
+
+	struct work_struct ext_pwr_change_work;
+	int chg_connected;
 };
 
 static void bq24185_hz_enable(struct bq24185_data *bd, int enable);
@@ -545,24 +551,28 @@ static int bq24185_check_status(struct bq24185_data *bd)
 static void bq24185_update_power_supply(struct bq24185_data *bd)
 {
 	MUTEX_LOCK(&bd->lock);
-	if (bd->ext_status < 0) {
-		switch (bd->cached_status.stat) {
-		case STAT_READY:
-			bd->chg_status = POWER_SUPPLY_STATUS_DISCHARGING;
-			break;
-		case STAT_CHARGE_IN_PROGRESS:
-			bd->chg_status = POWER_SUPPLY_STATUS_CHARGING;
-			break;
-		case STAT_CHARGE_DONE:
-			bd->chg_status = POWER_SUPPLY_STATUS_FULL;
-			break;
-		case STAT_FAULT:
-		default:
-			bd->chg_status = POWER_SUPPLY_STATUS_NOT_CHARGING;
-			break;
+	if (bd->chg_connected) {
+		if (bd->ext_status < 0) {
+			switch (bd->cached_status.stat) {
+			case STAT_READY:
+				bd->chg_status = POWER_SUPPLY_STATUS_DISCHARGING;
+				break;
+			case STAT_CHARGE_IN_PROGRESS:
+				bd->chg_status = POWER_SUPPLY_STATUS_CHARGING;
+				break;
+			case STAT_CHARGE_DONE:
+				bd->chg_status = POWER_SUPPLY_STATUS_FULL;
+				break;
+			case STAT_FAULT:
+			default:
+				bd->chg_status = POWER_SUPPLY_STATUS_NOT_CHARGING;
+				break;
+			}
+		} else {
+			bd->chg_status = bd->ext_status;
 		}
 	} else {
-		bd->chg_status = bd->ext_status;
+		bd->chg_status = POWER_SUPPLY_STATUS_DISCHARGING;
 	}
 
 	switch (bd->cached_status.fault) {
@@ -704,6 +714,63 @@ static int bq24185_bat_get_property(struct power_supply *bat_ps,
 	}
 	MUTEX_UNLOCK(&bd->lock);
 	return 0;
+}
+
+static int get_supplier_data(struct device *dev, void *data)
+{
+	struct power_supply *psy = (struct power_supply *)data;
+	struct power_supply *pst = dev_get_drvdata(dev);
+	unsigned int i;
+	union power_supply_propval ret;
+	struct bq24185_data *bd =
+		container_of(psy, struct bq24185_data, bat_ps);
+
+	for (i = 0; i < pst->num_supplicants; i++) {
+		if (strcmp(pst->supplied_to[i], psy->name))
+			continue;
+
+		if (!pst->get_property(pst, POWER_SUPPLY_PROP_ONLINE, &ret)) {
+			switch (pst->type) {
+			case POWER_SUPPLY_TYPE_USB:
+				if (ret.intval)
+					bd->chg_connected |= USB_CHG;
+				else
+					bd->chg_connected &= ~USB_CHG;
+				break;
+			case POWER_SUPPLY_TYPE_MAINS:
+				if (ret.intval)
+					bd->chg_connected |= WALL_CHG;
+				else
+					bd->chg_connected &= ~WALL_CHG;
+				break;
+			default:
+				break;
+			}
+		}
+	}
+
+	return 0;
+}
+
+static void bq24185_ext_pwr_change_worker(struct work_struct *work)
+{
+	struct bq24185_data *bd =
+		container_of(work, struct bq24185_data, ext_pwr_change_work);
+
+	MUTEX_LOCK(&bd->lock);
+	class_for_each_device(power_supply_class, NULL, &bd->bat_ps,
+			      get_supplier_data);
+	MUTEX_UNLOCK(&bd->lock);
+
+	bq24185_update_power_supply(bd);
+}
+
+static void bq24185_external_power_changed(struct power_supply *bat_ps)
+{
+	struct bq24185_data *bd =
+		container_of(bat_ps, struct bq24185_data, bat_ps);
+
+	queue_work(bd->wq, &bd->ext_pwr_change_work);
 }
 
 static int bq24185_set_input_voltage_dpm(struct bq24185_data *bd)
@@ -1328,6 +1395,7 @@ static int bq24185_probe(struct i2c_client *client,
 	bd->bat_ps.properties = bq24185_bat_main_props;
 	bd->bat_ps.num_properties = ARRAY_SIZE(bq24185_bat_main_props);
 	bd->bat_ps.get_property = bq24185_bat_get_property;
+	bd->bat_ps.external_power_changed = bq24185_external_power_changed;
 	bd->bat_ps.use_for_apm = 1;
 	bd->clientp = client;
 	bd->rsens = BQ24185_RSENS_REF;
@@ -1365,6 +1433,7 @@ static int bq24185_probe(struct i2c_client *client,
 	}
 
 	INIT_DELAYED_WORK(&bd->work, bq24185_reset_watchdog_worker);
+	INIT_WORK(&bd->ext_pwr_change_work, bq24185_ext_pwr_change_worker);
 
 	rc = power_supply_register(&client->dev, &bd->bat_ps);
 	if (rc) {
