@@ -1501,6 +1501,9 @@ static struct platform_device semc_chg_cradle = {
 static char *semc_chg_usb_supplied_to[] = {
 	BATTERY_CHARGALG_NAME,
 	BQ27520_NAME,
+#ifdef CONFIG_CHARGER_BQ24185
+	BQ24185_NAME,
+#endif
 };
 #endif
 
