@@ -521,6 +521,9 @@ error:
 error_active_count:
 	mutex_unlock(&device->mutex);
 
+	if (!result)
+		kgsl_cmdbatch_destroy(cmdbatch);
+
 	return (int)result;
 }
 
