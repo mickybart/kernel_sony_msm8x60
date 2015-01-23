@@ -2147,9 +2147,9 @@ static void a2xx_start(struct adreno_device *adreno_dev)
 		kgsl_regwrite(device, REG_RBBM_PM_OVERRIDE1, 0);
 
 	if (!adreno_is_a22x(adreno_dev))
-		kgsl_regwrite(device, REG_RBBM_PM_OVERRIDE2, 0);
+		kgsl_regwrite(device, REG_RBBM_PM_OVERRIDE2, 0x40);
 	else
-		kgsl_regwrite(device, REG_RBBM_PM_OVERRIDE2, 0x80);
+		kgsl_regwrite(device, REG_RBBM_PM_OVERRIDE2, 0xC0);
 
 	kgsl_regwrite(device, REG_RBBM_DEBUG, 0x00080000);
 
