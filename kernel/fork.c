@@ -417,7 +417,12 @@ static int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 				mapping->i_mmap_writable++;
 			flush_dcache_mmap_lock(mapping);
 			/* insert tmp into the share list, just after mpnt */
-			vma_prio_tree_add(tmp, mpnt);
+			if (unlikely(tmp->vm_flags & VM_NONLINEAR))
+				vma_nonlinear_insert(tmp,
+						&mapping->i_mmap_nonlinear);
+			else
+				vma_interval_tree_insert_after(tmp, mpnt,
+							&mapping->i_mmap);
 			flush_dcache_mmap_unlock(mapping);
 			mutex_unlock(&mapping->i_mmap_mutex);
 		}
@@ -1499,6 +1504,9 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 			attach_pid(p, PIDTYPE_SID, task_session(current));
 			list_add_tail(&p->sibling, &p->real_parent->children);
 			list_add_tail_rcu(&p->tasks, &init_task.tasks);
+#ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
+			add_2_adj_tree(p);
+#endif
 			__this_cpu_inc(process_counts);
 		} else {
 			list_add_tail_rcu(&p->thread_node,

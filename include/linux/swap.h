@@ -276,7 +276,7 @@ static inline int zone_reclaim(struct zone *z, gfp_t mask, unsigned int order)
 }
 #endif
 
-extern int page_evictable(struct page *page, struct vm_area_struct *vma);
+extern int page_evictable(struct page *page);
 extern void check_move_unevictable_pages(struct page **, int nr_pages);
 
 extern unsigned long scan_unevictable_pages;
@@ -360,7 +360,6 @@ struct backing_dev_info;
 #ifdef CONFIG_CGROUP_MEM_RES_CTLR
 extern void
 mem_cgroup_uncharge_swapcache(struct page *page, swp_entry_t ent, bool swapout);
-extern int mem_cgroup_count_swap_user(swp_entry_t ent, struct page **pagep);
 #else
 static inline void
 mem_cgroup_uncharge_swapcache(struct page *page, swp_entry_t ent, bool swapout)
@@ -465,14 +464,6 @@ static inline void
 mem_cgroup_uncharge_swapcache(struct page *page, swp_entry_t ent)
 {
 }
-
-#ifdef CONFIG_CGROUP_MEM_RES_CTLR
-static inline int
-mem_cgroup_count_swap_user(swp_entry_t ent, struct page **pagep)
-{
-	return 0;
-}
-#endif
 
 #endif /* CONFIG_SWAP */
 #endif /* __KERNEL__*/

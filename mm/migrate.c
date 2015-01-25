@@ -441,7 +441,10 @@ void migrate_page_copy(struct page *newpage, struct page *page)
 
 	mlock_migrate_page(newpage, page);
 	ksm_migrate_page(newpage, page);
-
+	/*
+	 * Please do not reorder this without considering how mm/ksm.c's
+	 * get_ksm_page() depends upon ksm_migrate_page() and PageSwapCache().
+	 */
 	ClearPageSwapCache(page);
 	ClearPagePrivate(page);
 	set_page_private(page, 0);
@@ -679,7 +682,6 @@ static int __unmap_and_move(struct page *page, struct page *newpage,
 {
 	int rc = -EAGAIN;
 	int remap_swapcache = 1;
-	int charge = 0;
 	struct mem_cgroup *mem;
 	struct anon_vma *anon_vma = NULL;
 
@@ -706,27 +708,8 @@ static int __unmap_and_move(struct page *page, struct page *newpage,
 		lock_page(page);
 	}
 
-	/*
-	 * Only memory hotplug's offline_pages() caller has locked out KSM,
-	 * and can safely migrate a KSM page.  The other cases have skipped
-	 * PageKsm along with PageReserved - but it is only now when we have
-	 * the page lock that we can be certain it will not go KSM beneath us
-	 * (KSM will not upgrade a page from PageAnon to PageKsm when it sees
-	 * its pagecount raised, but only here do we take the page lock which
-	 * serializes that).
-	 */
-	if (PageKsm(page) && !offlining) {
-		rc = -EBUSY;
-		goto unlock;
-	}
-
 	/* charge against new page */
-	charge = mem_cgroup_prepare_migration(page, newpage, &mem, GFP_KERNEL);
-	if (charge == -ENOMEM) {
-		rc = -ENOMEM;
-		goto unlock;
-	}
-	BUG_ON(charge);
+	mem_cgroup_prepare_migration(page, newpage, &mem);
 
 	if (PageWriteback(page)) {
 		/*
@@ -751,7 +734,7 @@ static int __unmap_and_move(struct page *page, struct page *newpage,
 	 * File Caches may use write_page() or lock_page() in migration, then,
 	 * just care Anon page here.
 	 */
-	if (PageAnon(page)) {
+	if (PageAnon(page) && !PageKsm(page)) {
 		/*
 		 * Only page_lock_anon_vma() understands the subtleties of
 		 * getting a hold on an anon_vma from outside one of its mms.
@@ -816,9 +799,7 @@ skip_unmap:
 		put_anon_vma(anon_vma);
 
 uncharge:
-	if (!charge)
-		mem_cgroup_end_migration(mem, page, newpage, rc == 0);
-unlock:
+	mem_cgroup_end_migration(mem, page, newpage, rc == 0);
 	unlock_page(page);
 out:
 	return rc;
@@ -1130,7 +1111,7 @@ static int do_move_page_to_node_array(struct mm_struct *mm,
 			goto set_status;
 
 		/* Use PageReserved to check for zero page */
-		if (PageReserved(page) || PageKsm(page))
+		if (PageReserved(page))
 			goto put_and_set;
 
 		pp->page = page;
@@ -1291,7 +1272,7 @@ static void do_pages_stat_array(struct mm_struct *mm, unsigned long nr_pages,
 
 		err = -ENOENT;
 		/* Use PageReserved to check for zero page */
-		if (!page || PageReserved(page) || PageKsm(page))
+		if (!page || PageReserved(page))
 			goto set_status;
 
 		err = page_to_nid(page);

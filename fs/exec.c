@@ -617,7 +617,7 @@ static int shift_arg_pages(struct vm_area_struct *vma, unsigned long shift)
 	 * process cleanup to remove whatever mess we made.
 	 */
 	if (length != move_page_tables(vma, old_start,
-				       vma, new_start, length))
+				       vma, new_start, length, false))
 		return -ENOMEM;
 
 	lru_add_drain();
@@ -952,6 +952,10 @@ static int de_thread(struct task_struct *tsk)
 		transfer_pid(leader, tsk, PIDTYPE_SID);
 
 		list_replace_rcu(&leader->tasks, &tsk->tasks);
+#ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
+		delete_from_adj_tree(leader);
+		add_2_adj_tree(tsk);
+ #endif
 		list_replace_init(&leader->sibling, &tsk->sibling);
 
 		tsk->group_leader = tsk;

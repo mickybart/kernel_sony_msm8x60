@@ -1975,27 +1975,97 @@ static int a2xx_rb_init(struct adreno_device *adreno_dev,
 static unsigned int a2xx_busy_cycles(struct adreno_device *adreno_dev)
 {
 	struct kgsl_device *device = &adreno_dev->dev;
-	unsigned int reg, val;
+	unsigned int val, ret = 0;
+
+	/* Get the value */
+	kgsl_regread(device, REG_RBBM_PERFCOUNTER1_LO, &val);
+
+	/* Return 0 for the first read */
+	if (adreno_dev->gpu_cycles != 0) {
+		if (val < adreno_dev->gpu_cycles)
+			ret = (0xFFFFFFFF - adreno_dev->gpu_cycles) + val;
+		else
+			ret = val - adreno_dev->gpu_cycles;
+	}
+
+	adreno_dev->gpu_cycles = val;
+	return ret;
+}
+
+/*
+ * Define the available perfcounter groups - these get used by
+ * adreno_perfcounter_get and adreno_perfcounter_put
+ */
+
+static struct adreno_perfcount_register a2xx_perfcounters_cp[] = {
+	{ KGSL_PERFCOUNTER_NOT_USED, 0, 0, REG_CP_PERFCOUNTER_LO,
+		REG_CP_PERFCOUNTER_HI, 0, REG_CP_PERFCOUNTER_SELECT },
+};
+
+static struct adreno_perfcount_register a2xx_perfcounters_rbbm[] = {
+	{ KGSL_PERFCOUNTER_NOT_USED, 0, 0, REG_RBBM_PERFCOUNTER1_LO,
+		REG_RBBM_PERFCOUNTER1_HI, 0, REG_RBBM_PERFCOUNTER1_SELECT },
+};
+
+static struct adreno_perfcount_group a2xx_perfcounter_groups[] = {
+	ADRENO_PERFCOUNTER_GROUP(a2xx, cp),
+	ADRENO_PERFCOUNTER_GROUP(a2xx, rbbm),
+};
+
+static struct adreno_perfcounters a2xx_perfcounters = {
+	a2xx_perfcounter_groups,
+	ARRAY_SIZE(a2xx_perfcounter_groups),
+};
+
+static void a2xx_perfcounter_close(struct adreno_device *adreno_dev)
+{
+	adreno_perfcounter_put(adreno_dev, KGSL_PERFCOUNTER_GROUP_RBBM,
+		1, PERFCOUNTER_FLAG_KERNEL);
+}
+
+static int a2xx_perfcounter_init(struct adreno_device *adreno_dev)
+{
+	/* Reserve and start countable 1 in the RBBM perfcounter group */
+	return adreno_perfcounter_get(adreno_dev, KGSL_PERFCOUNTER_GROUP_RBBM, 1,
+			NULL, NULL, PERFCOUNTER_FLAG_KERNEL);
+}
+
+static int a2xx_perfcounter_enable(struct adreno_device *adreno_dev,
+	unsigned int group, unsigned int counter, unsigned int countable)
+{
+	struct kgsl_device *device = &adreno_dev->dev;
+	struct adreno_perfcount_register *reg;
+
+	reg = &(adreno_dev->gpudev->perfcounters->groups[group].regs[counter]);
+
+	/* Select the desired perfcounter */
+	kgsl_regwrite(device, reg->select, countable);
+	return 0;
+}
+
+static uint64_t a2xx_perfcounter_read(struct adreno_device *adreno_dev,
+	unsigned int group, unsigned int counter)
+{
+	struct kgsl_device *device = &adreno_dev->dev;
+	struct adreno_perfcount_register *reg;
+	unsigned int lo = 0, hi = 0;
+	unsigned int offset;
+
+	reg = &(adreno_dev->gpudev->perfcounters->groups[group].regs[counter]);
 
 	/* Freeze the counter */
 	kgsl_regwrite(device, REG_CP_PERFMON_CNTL,
 		REG_PERF_MODE_CNT | REG_PERF_STATE_FREEZE);
 
-	/* Get the value */
-	kgsl_regread(device, REG_RBBM_PERFCOUNTER1_LO, &val);
-
-	/* Reset the counter */
-	kgsl_regwrite(device, REG_CP_PERFMON_CNTL,
-		REG_PERF_MODE_CNT | REG_PERF_STATE_RESET);
+	offset = reg->offset;
+	/* Read the values */
+	kgsl_regread(device, offset, &lo);
+	kgsl_regread(device, offset + 1, &hi);
 
 	/* Re-Enable the performance monitors */
-	kgsl_regread(device, REG_RBBM_PM_OVERRIDE2, &reg);
-	kgsl_regwrite(device, REG_RBBM_PM_OVERRIDE2, (reg | 0x40));
-	kgsl_regwrite(device, REG_RBBM_PERFCOUNTER1_SELECT, 0x1);
 	kgsl_regwrite(device, REG_CP_PERFMON_CNTL,
 		REG_PERF_MODE_CNT | REG_PERF_STATE_ENABLE);
-
-	return val;
+	return (((uint64_t) hi) << 32) | lo;
 }
 
 static void a2xx_gmeminit(struct adreno_device *adreno_dev)
@@ -2077,9 +2147,9 @@ static void a2xx_start(struct adreno_device *adreno_dev)
 		kgsl_regwrite(device, REG_RBBM_PM_OVERRIDE1, 0);
 
 	if (!adreno_is_a22x(adreno_dev))
-		kgsl_regwrite(device, REG_RBBM_PM_OVERRIDE2, 0);
+		kgsl_regwrite(device, REG_RBBM_PM_OVERRIDE2, 0x40);
 	else
-		kgsl_regwrite(device, REG_RBBM_PM_OVERRIDE2, 0x80);
+		kgsl_regwrite(device, REG_RBBM_PM_OVERRIDE2, 0xC0);
 
 	kgsl_regwrite(device, REG_RBBM_DEBUG, 0x00080000);
 
@@ -2089,6 +2159,13 @@ static void a2xx_start(struct adreno_device *adreno_dev)
 	kgsl_regwrite(device, REG_SQ_INT_CNTL, 0);
 
 	a2xx_gmeminit(adreno_dev);
+
+	/* Turn on performance counters */
+	kgsl_regwrite(device, REG_CP_PERFMON_CNTL,
+		REG_PERF_MODE_CNT | REG_PERF_STATE_ENABLE);
+
+	/* Turn on the GPU busy counter and let it run free */
+	adreno_dev->gpu_cycles = 0;
 
 	kgsl_regwrite(device, REG_CP_DEBUG, A2XX_CP_DEBUG_DEFAULT);
 }
@@ -2313,4 +2390,10 @@ struct adreno_gpudev adreno_a2xx_gpudev = {
 	.busy_cycles = a2xx_busy_cycles,
 	.start = a2xx_start,
 	.postmortem_dump = a2xx_postmortem_dump,
+
+	.perfcounters = &a2xx_perfcounters,
+	.perfcounter_init = a2xx_perfcounter_init,
+	.perfcounter_close = a2xx_perfcounter_close,
+	.perfcounter_enable = a2xx_perfcounter_enable,
+	.perfcounter_read = a2xx_perfcounter_read,
 };
