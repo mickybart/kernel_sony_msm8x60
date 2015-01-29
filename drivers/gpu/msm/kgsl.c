@@ -461,13 +461,6 @@ int kgsl_context_init(struct kgsl_device_private *dev_priv,
 	}
 
 	kref_init(&context->refcount);
-	/*
-	 * Get a refernce to the process private so its not destroyed, until
-	 * the context is destroyed. This will also prevent the pagetable
-	 * from being destroyed
-	 */
-	if (!kgsl_process_private_get(dev_priv->process_priv))
-		goto fail_free_id;
 	context->device = dev_priv->device;
 	context->dev_priv = dev_priv;
 	context->proc_priv = dev_priv->process_priv;
@@ -537,6 +530,7 @@ int kgsl_context_detach(struct kgsl_context *context)
 	 */
 	kgsl_context_cancel_events(context->device, context);
 
+	context->dev_priv = NULL;
 	kgsl_context_put(context);
 
 	return ret;
@@ -576,7 +570,6 @@ kgsl_context_destroy(struct kref *kref)
 	}
 	write_unlock(&device->context_lock);
 	kgsl_sync_timeline_destroy(context);
-	kgsl_process_private_put(context->proc_priv);
 
 	device->ftbl->drawctxt_destroy(context);
 }
