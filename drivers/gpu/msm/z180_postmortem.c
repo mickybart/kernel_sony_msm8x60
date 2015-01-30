@@ -193,6 +193,7 @@ static void z180_dump_ib(struct kgsl_device *device)
 						linebuf);
 			}
 			KGSL_LOG_DUMP(device, "IB Dump Finished\n");
+			kgsl_memdesc_unmap(&entry->memdesc);
 			kgsl_mem_entry_put(entry);
 		}
 	}
