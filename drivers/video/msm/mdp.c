@@ -2598,13 +2598,13 @@ int mdp_bus_scale_update_request(u64 ab_p0, u64 ib_p0, u64 ab_p1, u64 ib_p1)
 	mdp_bus_usecases[bus_index].vectors[0].ab = min(ab_p0, mdp_max_bw);
 	mdp_bus_usecases[bus_index].vectors[2].ab = min(ab_p0, mdp_max_bw);
 	ib_p0 = max(ib_p0, ab_p0);
-	mdp_bus_usecases[bus_index].vectors[0].ib = min(ib_p0 * 2, mdp_max_bw);
+	mdp_bus_usecases[bus_index].vectors[0].ib = min(ib_p0, mdp_max_bw);
 	mdp_bus_usecases[bus_index].vectors[2].ib = min(ib_p0, mdp_max_bw);
 
 	mdp_bus_usecases[bus_index].vectors[1].ab = min(ab_p1, mdp_max_bw);
 	mdp_bus_usecases[bus_index].vectors[3].ab = min(ab_p1, mdp_max_bw);
 	ib_p1 = max(ib_p1, ab_p1);
-	mdp_bus_usecases[bus_index].vectors[1].ib = min(ib_p1 * 2, mdp_max_bw);
+	mdp_bus_usecases[bus_index].vectors[1].ib = min(ib_p1, mdp_max_bw);
 	mdp_bus_usecases[bus_index].vectors[3].ib = min(ib_p1, mdp_max_bw);
 
 	pr_debug("%s: handle=%d index=%d ab=%llu ib=%llu\n", __func__,
