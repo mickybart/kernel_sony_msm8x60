@@ -13,8 +13,6 @@
 #include <linux/input.h>
 #include <linux/clearpad.h>
 
-#define KEY_APP_SWITCH 580 /* Android specific key */
-
 struct synaptics_button_data synaptics_back_key = {
 	.code = KEY_BACK,
 };
@@ -23,8 +21,8 @@ struct synaptics_button_data synaptics_home_key = {
 	.code = KEY_HOME,
 };
 
-struct synaptics_button_data synaptics_app_switch_key = {
-	.code = KEY_APP_SWITCH,
+struct synaptics_button_data synaptics_menu_key = {
+	.code = KEY_MENU,
 };
 
 struct synaptics_funcarea clearpad_funcarea_array[] = {
@@ -42,7 +40,7 @@ struct synaptics_funcarea clearpad_funcarea_array[] = {
 	},
 	{
 		{ 500, 1315, 719, 1327 }, { 480, 1280, 719, 1327 },
-		SYN_FUNCAREA_BUTTON, &synaptics_app_switch_key
+		SYN_FUNCAREA_BUTTON, &synaptics_menu_key
 	},
 	{
 		{ 240, 460, 479, 819 }, { 240, 460, 479, 819 },
