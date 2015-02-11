@@ -513,6 +513,7 @@ z180_cmdstream_issueibcmds(struct kgsl_device_private *dev_priv,
 
 	z180_cmdwindow_write(device, ADDR_VGV3_CONTROL, cmd);
 	z180_cmdwindow_write(device, ADDR_VGV3_CONTROL, 0);
+	kgsl_memdesc_unmap(&entry->memdesc);
 error_put:
 	kgsl_mem_entry_put(entry);
 error:

@@ -1029,6 +1029,8 @@ static bool _parse_ibs(struct kgsl_device_private *dev_priv,
 		}
 	}
 
+	kgsl_memdesc_unmap(&entry->memdesc);
+
 	ret = true;
 done:
 	if (!ret)

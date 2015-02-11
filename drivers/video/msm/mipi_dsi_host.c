@@ -56,6 +56,7 @@ static struct mutex clk_mutex;
 
 static struct list_head pre_kickoff_list;
 static struct list_head post_kickoff_list;
+struct work_struct mdp_reset_work;
 
 enum {
 	STAT_DSI_START,
@@ -92,6 +93,11 @@ void mipi_dsi_mdp_stat_inc(int which)
 }
 #endif
 
+static void mdp_reset_wq_handler(struct work_struct *work)
+{
+	mdp4_mixer_reset(0);
+}
+
 void mipi_dsi_init(void)
 {
 	init_completion(&dsi_dma_comp);
@@ -104,6 +110,7 @@ void mipi_dsi_init(void)
 	spin_lock_init(&dsi_clk_lock);
 	mutex_init(&cmd_mutex);
 	mutex_init(&clk_mutex);
+	INIT_WORK(&mdp_reset_work, mdp_reset_wq_handler);
 
 	INIT_LIST_HEAD(&pre_kickoff_list);
 	INIT_LIST_HEAD(&post_kickoff_list);
@@ -1198,6 +1205,62 @@ int mipi_dsi_cmds_tx(struct dsi_buf *tp, struct dsi_cmd_desc *cmds, int cnt)
 	return cnt;
 }
 
+/*
+ * mipi_dsi_cmds_single_tx:
+ * thread context only
+ */
+int mipi_dsi_cmds_single_tx(struct dsi_buf *tp, struct dsi_cmd_desc *cmds,
+								int cnt)
+{
+	struct dsi_cmd_desc *cm;
+	uint32 dsi_ctrl, ctrl;
+	int i, j = 0, k = 0, cmd_len = 0, video_mode;
+	char *cmds_tx;
+	char *bp;
+
+	if (tp == NULL || cmds == NULL) {
+		pr_err("%s: Null commands", __func__);
+		return -EINVAL;
+	}
+
+	/* turn on cmd mode
+	* for video mode, do not send cmds more than
+	* one pixel line, since it only transmit it
+	* during BLLP.
+	*/
+	dsi_ctrl = MIPI_INP(MIPI_DSI_BASE + 0x0000);
+	video_mode = dsi_ctrl & 0x02; /* VIDEO_MODE_EN */
+	if (video_mode) {
+		ctrl = dsi_ctrl | 0x04; /* CMD_MODE_EN */
+		MIPI_OUTP(MIPI_DSI_BASE + 0x0000, ctrl);
+	}
+
+	cm = cmds;
+	cmds_tx = kmalloc((DSI_BUF_SIZE + DSI_HOST_HDR_SIZE) * cnt, GFP_KERNEL);
+	mipi_dsi_buf_init(tp);
+	mipi_dsi_enable_irq(DSI_CMD_TERM);
+	for (i = 0; i < cnt; i++) {
+		mipi_dsi_buf_init(tp);
+		mipi_dsi_cmd_dma_add(tp, cm);
+		bp = tp->data;
+		for (j = 0; j < tp->len; j++) {
+			*(cmds_tx + k) = *bp++;
+			k++;
+		}
+		cmd_len = cmd_len + tp->len;
+		cm++;
+	}
+	tp->data = cmds_tx;
+	tp->len = cmd_len;
+	mipi_dsi_cmd_dma_tx(tp);
+	kfree(cmds_tx);
+
+	if (video_mode)
+		MIPI_OUTP(MIPI_DSI_BASE + 0x0000, dsi_ctrl); /* restore */
+
+	return cnt;
+}
+
 /* MIPI_DSI_MRPS, Maximum Return Packet Size */
 static char max_pktsize[2] = {0x00, 0x00}; /* LSB tx first, 10 bytes */
 
@@ -1568,7 +1631,10 @@ void mipi_dsi_cmdlist_tx(struct dcs_cmd_req *req)
 
 	mipi_dsi_buf_init(&dsi_tx_buf);
 	tp = &dsi_tx_buf;
-	ret = mipi_dsi_cmds_tx(tp, req->cmds, req->cmds_cnt);
+	if (req->flags & CMD_REQ_SINGLE_TX)
+		ret = mipi_dsi_cmds_single_tx(tp, req->cmds, req->cmds_cnt);
+	else
+		ret = mipi_dsi_cmds_tx(tp, req->cmds, req->cmds_cnt);
 
 	if (req->cb)
 		req->cb(ret);
@@ -1694,6 +1760,11 @@ void mipi_dsi_ack_err_status(void)
 
 	if (status) {
 		MIPI_OUTP(MIPI_DSI_BASE + 0x0064, status);
+		/*
+		 * base on hw enginner, write an extra 0 needed
+		 * to clear error bits
+		 */
+		MIPI_OUTP(MIPI_DSI_BASE + 0x0064, ~status);
 		pr_debug("%s: status=%x\n", __func__, status);
 	}
 }
@@ -1731,7 +1802,7 @@ void mipi_dsi_fifo_status(void)
 		MIPI_OUTP(MIPI_DSI_BASE + 0x0008, status);
 		pr_err("%s: Error: status=%x\n", __func__, status);
 		mipi_dsi_sw_reset();
-		mdp4_mixer_reset(0);
+		schedule_work(&mdp_reset_work);
 	}
 }
 
