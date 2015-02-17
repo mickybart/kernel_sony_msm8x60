@@ -2172,8 +2172,7 @@ static int synaptics_clearpad_pm_resume(struct device *dev)
 		 this->active, task_name[this->task]);
 	UNLOCK(this);
 
-	if (!this->wakeup)
-	    rc = synaptics_clearpad_set_power(this);
+	rc = synaptics_clearpad_set_power(this);
 	return rc;
 }
 
