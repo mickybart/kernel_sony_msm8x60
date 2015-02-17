@@ -108,6 +108,13 @@ config FB_MSM_MDP_NONE
 
 endchoice
 
+config FB_MSM_MDP_LUT
+        bool "MDP LUT Control"
+        depends on FB_MSM_MDP_HW
+        default y
+        ---help---
+          Color Calibration Control
+
 config FB_MSM_EBI2
 	bool
 	default n
