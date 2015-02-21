@@ -617,7 +617,7 @@ static int msm_otg_set_power(struct usb_phy *xceiv, unsigned mA)
 
 #ifdef CONFIG_FORCE_FAST_CHARGE
 	if (force_fast_charge == 1) {
-		/* don't override charging current if available current is greater /*
+		/* don't override charging current if available current is greater */
 		if (charge >= USB_FASTCHG_LOAD) {
 			pr_info("Available current already greater than USB fastcharging current.\n");
 			pr_info("Override of USB charging current cancelled.\n");
