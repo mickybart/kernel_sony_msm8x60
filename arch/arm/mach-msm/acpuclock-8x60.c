@@ -481,15 +481,15 @@ static struct clkctl_acpu_speed acpu_freq_tbl_oc[] = {
   { {1, 1}, 1296000, ACPU_SCPLL, 0, 0, 1, 0x18, L2(17), 1150000, 0x03006000},
   { {1, 1}, 1350000, ACPU_SCPLL, 0, 0, 1, 0x19, L2(18), 1150000, 0x03006000},
   { {1, 1}, 1404000, ACPU_SCPLL, 0, 0, 1, 0x1A, L2(19), 1175000, 0x03006000},
-  { {1, 1}, 1458000, ACPU_SCPLL, 0, 0, 1, 0x1B, L2(19), 1200000, 0x03006000},
-  { {1, 1}, 1512000, ACPU_SCPLL, 0, 0, 1, 0x1C, L2(19), 1225000, 0x03006000},
-  { {1, 1}, 1566000, ACPU_SCPLL, 0, 0, 1, 0x1D, L2(19), 1225000, 0x03006000},
-  { {1, 1}, 1620000, ACPU_SCPLL, 0, 0, 1, 0x1E, L2(19), 1250000, 0x03006000},
-  { {1, 1}, 1674000, ACPU_SCPLL, 0, 0, 1, 0x1F, L2(19), 1275000, 0x03006000},
-  { {1, 1}, 1728000, ACPU_SCPLL, 0, 0, 1, 0x20, L2(19), 1300000, 0x03006000},
+  { {1, 1}, 1458000, ACPU_SCPLL, 0, 0, 1, 0x1B, L2(20), 1200000, 0x03006000},
+  { {1, 1}, 1512000, ACPU_SCPLL, 0, 0, 1, 0x1C, L2(21), 1225000, 0x03006000},
+  { {1, 1}, 1566000, ACPU_SCPLL, 0, 0, 1, 0x1D, L2(22), 1225000, 0x03006000},
+  { {1, 1}, 1620000, ACPU_SCPLL, 0, 0, 1, 0x1E, L2(22), 1250000, 0x03006000},
+  { {1, 1}, 1674000, ACPU_SCPLL, 0, 0, 1, 0x1F, L2(22), 1275000, 0x03006000},
+  { {1, 1}, 1728000, ACPU_SCPLL, 0, 0, 1, 0x20, L2(22), 1300000, 0x03006000},
 #ifdef CONFIG_MACH_SEMC_NOZOMI_OC_ULTRA
-  { {1, 1}, 1782000, ACPU_SCPLL, 0, 0, 1, 0x21, L2(19), 1325000, 0x03006000},
-  { {1, 1}, 1836000, ACPU_SCPLL, 0, 0, 1, 0x22, L2(19), 1337500, 0x03006000},
+  { {1, 1}, 1782000, ACPU_SCPLL, 0, 0, 1, 0x21, L2(22), 1325000, 0x03006000},
+  { {1, 1}, 1836000, ACPU_SCPLL, 0, 0, 1, 0x22, L2(22), 1337500, 0x03006000},
 #endif
 #if 0
   { {1, 1}, 1890000, ACPU_SCPLL, 0, 0, 1, 0x23, L2(19), 1350000, 0x03006000},
@@ -878,7 +878,11 @@ static void __init scpll_init(int pll, unsigned int max_l_val)
 	udelay(10);
 
 	/* Calibrate the SCPLL for the frequency range needed. */
+#ifdef CONFIG_MACH_SEMC_NOZOMI_OC_NO
 	regval = (max_l_val << 24) | (L_VAL_SCPLL_CAL_MIN << 16);
+#else
+	regval = (max_l_val << 30) | (L_VAL_SCPLL_CAL_MIN << 16);
+#endif
 	writel_relaxed(regval, sc_pll_base[pll] + SCPLL_CAL_OFFSET);
 
 	/* Start calibration */
