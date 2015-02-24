@@ -490,12 +490,10 @@ static struct clkctl_acpu_speed acpu_freq_tbl_oc[] = {
 #ifdef CONFIG_MACH_SEMC_NOZOMI_OC_ULTRA
   { {1, 1}, 1782000, ACPU_SCPLL, 0, 0, 1, 0x21, L2(22), 1325000, 0x03006000},
   { {1, 1}, 1836000, ACPU_SCPLL, 0, 0, 1, 0x22, L2(22), 1337500, 0x03006000},
-#endif
-#if 0
-  { {1, 1}, 1890000, ACPU_SCPLL, 0, 0, 1, 0x23, L2(19), 1350000, 0x03006000},
-  { {1, 1}, 1944000, ACPU_SCPLL, 0, 0, 1, 0x24, L2(19), 1362500, 0x03006000},
-  { {1, 1}, 1998000, ACPU_SCPLL, 0, 0, 1, 0x25, L2(19), 1375000, 0x03006000},
-  { {1, 1}, 2052000, ACPU_SCPLL, 0, 0, 1, 0x26, L2(19), 1400000, 0x03006000},
+  { {1, 1}, 1890000, ACPU_SCPLL, 0, 0, 1, 0x23, L2(22), 1350000, 0x03006000},
+  { {1, 1}, 1944000, ACPU_SCPLL, 0, 0, 1, 0x24, L2(22), 1362500, 0x03006000},
+  { {1, 1}, 1998000, ACPU_SCPLL, 0, 0, 1, 0x25, L2(22), 1375000, 0x03006000},
+  { {1, 1}, 2052000, ACPU_SCPLL, 0, 0, 1, 0x26, L2(22), 1400000, 0x03006000},
 #endif
   { {0, 0}, 0 },
 };
@@ -878,11 +876,7 @@ static void __init scpll_init(int pll, unsigned int max_l_val)
 	udelay(10);
 
 	/* Calibrate the SCPLL for the frequency range needed. */
-#ifdef CONFIG_MACH_SEMC_NOZOMI_OC_NO
 	regval = (max_l_val << 24) | (L_VAL_SCPLL_CAL_MIN << 16);
-#else
-	regval = (max_l_val << 30) | (L_VAL_SCPLL_CAL_MIN << 16);
-#endif
 	writel_relaxed(regval, sc_pll_base[pll] + SCPLL_CAL_OFFSET);
 
 	/* Start calibration */
