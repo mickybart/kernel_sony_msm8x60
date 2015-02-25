@@ -899,11 +899,7 @@ static struct kgsl_device_platform_data kgsl_3d0_pdata = {
 		},
 #endif
 	},
-#ifndef CONFIG_MACH_SEMC_NOZOMI_OC_ULTRA
-	.init_level = 0,
-#else
-	.init_level = 1,
-#endif
+	.init_level = 3,
 	.num_levels = 5,
 	.set_grp_async = NULL,
 #ifdef CONFIG_MACH_SEMC_NOZOMI_OC_NO
@@ -977,14 +973,11 @@ static struct kgsl_device_platform_data kgsl_2d0_pdata = {
 		},
 #endif
 	},
-#ifndef CONFIG_MACH_SEMC_NOZOMI_OC_ULTRA
-	.init_level = 0,
-#else
-	.init_level = 1,
-#endif
 #ifdef CONFIG_MACH_SEMC_NOZOMI_OC_NO
+	.init_level = 1,
 	.num_levels = 3,
 #else
+	.init_level = 2,
 	.num_levels = 4,
 #endif
 	.set_grp_async = NULL,
@@ -1054,14 +1047,11 @@ static struct kgsl_device_platform_data kgsl_2d1_pdata = {
 		},
 #endif
 	},
-#ifndef CONFIG_MACH_SEMC_NOZOMI_OC_ULTRA
-	.init_level = 0,
-#else
-	.init_level = 1,
-#endif
 #ifdef CONFIG_MACH_SEMC_NOZOMI_OC_NO
+	.init_level = 1,
 	.num_levels = 3,
 #else
+	.init_level = 2,
 	.num_levels = 4,
 #endif
 	.set_grp_async = NULL,
