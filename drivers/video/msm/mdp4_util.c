@@ -2296,14 +2296,20 @@ void mdp4_init_writeback_buf(struct msm_fb_data_type *mfd, u32 mix_num)
 u32 mdp4_allocate_writeback_buf(struct msm_fb_data_type *mfd, u32 mix_num)
 {
 	struct mdp_buf_type *buf;
+	u32 mem_hid = mfd->mem_hid;
 	ion_phys_addr_t	addr, read_addr = 0;
 	size_t buffer_size;
 	unsigned long len;
 
-	if (mix_num == MDP4_MIXER0)
+	if (mix_num == MDP4_MIXER0) {
 		buf = mfd->ov0_wb_buf;
-	else
+		if (mfd->ov0_wb_hid)
+			mem_hid = mfd->ov0_wb_hid;
+	} else {
 		buf = mfd->ov1_wb_buf;
+		if (mfd->ov1_wb_hid)
+			mem_hid = mfd->ov1_wb_hid;
+	}
 
 	if (buf->write_addr || !IS_ERR_OR_NULL(buf->ihdl))
 		return 0;
@@ -2317,10 +2323,10 @@ u32 mdp4_allocate_writeback_buf(struct msm_fb_data_type *mfd, u32 mix_num)
 		mfd->panel_info.yres * 3 * 2, SZ_4K);
 
 	if (!IS_ERR_OR_NULL(mfd->iclient)) {
-		pr_info("%s:%d ion based allocation mfd->mem_hid 0x%x\n",
-			__func__, __LINE__, mfd->mem_hid);
+		pr_info("%s:%d ion based allocation mem_hid 0x%x\n",
+			__func__, __LINE__, mem_hid);
 		buf->ihdl = ion_alloc(mfd->iclient, buffer_size, SZ_4K,
-			mfd->mem_hid, 0);
+			mem_hid, 0);
 		if (!IS_ERR_OR_NULL(buf->ihdl)) {
 			if (mdp_iommu_split_domain) {
 				if (ion_map_iommu(mfd->iclient, buf->ihdl,
@@ -2329,7 +2335,7 @@ u32 mdp4_allocate_writeback_buf(struct msm_fb_data_type *mfd, u32 mix_num)
 					pr_err("ion_map_iommu() read failed\n");
 					return -ENOMEM;
 				}
-				if (mfd->mem_hid & ION_SECURE) {
+				if (mem_hid & ION_SECURE) {
 					if (ion_phys(mfd->iclient, buf->ihdl,
 						&addr, (size_t *)&len)) {
 						pr_err("%s:%d: ion_phys map failed\n",
@@ -2360,7 +2366,7 @@ u32 mdp4_allocate_writeback_buf(struct msm_fb_data_type *mfd, u32 mix_num)
 		}
 	} else {
 		addr = allocate_contiguous_memory_nomap(buffer_size,
-			mfd->mem_hid, 4);
+			mem_hid, 4);
 	}
 	if (addr) {
 		pr_info("allocating %d bytes at %x for mdp writeback\n",
@@ -2383,16 +2389,22 @@ u32 mdp4_allocate_writeback_buf(struct msm_fb_data_type *mfd, u32 mix_num)
 void mdp4_free_writeback_buf(struct msm_fb_data_type *mfd, u32 mix_num)
 {
 	struct mdp_buf_type *buf;
+	u32 mem_hid = mfd->mem_hid;
 
-	if (mix_num == MDP4_MIXER0)
+	if (mix_num == MDP4_MIXER0) {
 		buf = mfd->ov0_wb_buf;
-	else
+		if (mfd->ov0_wb_hid)
+			mem_hid = mfd->ov0_wb_hid;
+	} else {
 		buf = mfd->ov1_wb_buf;
+		if (mfd->ov1_wb_hid)
+			mem_hid = mfd->ov1_wb_hid;
+	}
 
 	if (!IS_ERR_OR_NULL(mfd->iclient)) {
 		if (!IS_ERR_OR_NULL(buf->ihdl)) {
 			if (mdp_iommu_split_domain) {
-				if (!(mfd->mem_hid & ION_SECURE))
+				if (!(mem_hid & ION_SECURE))
 					ion_unmap_iommu(mfd->iclient, buf->ihdl,
 						DISPLAY_WRITE_DOMAIN, GEN_POOL);
 				ion_unmap_iommu(mfd->iclient, buf->ihdl,

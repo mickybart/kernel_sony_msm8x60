@@ -2874,10 +2874,14 @@ static int mdp_probe(struct platform_device *pdev)
 	if (mdp_pdata) {
 		mfd->ov0_wb_buf->size = mdp_pdata->ov0_wb_size;
 		mfd->ov1_wb_buf->size = mdp_pdata->ov1_wb_size;
+		mfd->ov0_wb_hid = mdp_pdata->ov0_wb_hid;
+		mfd->ov1_wb_hid = mdp_pdata->ov1_wb_hid;
 		mfd->mem_hid = mdp_pdata->mem_hid;
 	} else {
 		mfd->ov0_wb_buf->size = 0;
 		mfd->ov1_wb_buf->size = 0;
+		mfd->ov0_wb_hid = 0;
+		mfd->ov1_wb_hid = 0;
 		mfd->mem_hid = 0;
 	}
 
