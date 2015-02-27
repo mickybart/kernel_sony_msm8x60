@@ -2422,7 +2422,7 @@ unsigned char hdmi_is_primary;
 #define MSM_ION_SF_SIZE                0x7000000 /* 112MB */
 #define MSM_ION_CAMERA_SIZE     0x5000000 /*80MB*/
 
-#define MSM_ION_WB_SIZE		(MSM_FB_OVERLAY0_WRITEBACK_SIZE + MSM_FB_OVERLAY1_WRITEBACK_SIZE)
+#define MSM_ION_WB_SIZE		MSM_FB_OVERLAY1_WRITEBACK_SIZE
 
 #ifdef CONFIG_QSEECOM
 #define MSM_ION_QSECOM_SIZE	0x300000 /* (3MB) */
@@ -8016,6 +8016,8 @@ static struct msm_panel_common_pdata mdp_pdata = {
 	.mem_hid = MEMTYPE_EBI1,
 #endif
 	.mdp_iommu_split_domain = 0,
+	.ov0_wb_hid = BIT(ION_CP_MM_HEAP_ID),
+	.ov1_wb_hid = BIT(ION_CP_WB_HEAP_ID),
 };
 
 static void __init reserve_mdp_memory(void)
