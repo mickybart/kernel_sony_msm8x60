@@ -426,6 +426,8 @@ struct msm_panel_common_pdata {
 	ssize_t power_off_set_size_2;
 	u32 ov0_wb_size;  /* overlay0 writeback size */
 	u32 ov1_wb_size;  /* overlay1 writeback size */
+	u32 ov0_wb_hid;
+	u32 ov1_wb_hid;
 	u32 mem_hid;
 	char cont_splash_enabled;
 	u32 splash_screen_addr;

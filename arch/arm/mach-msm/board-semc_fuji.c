@@ -2376,13 +2376,13 @@ unsigned char hdmi_is_primary;
 #endif
 
 #ifdef CONFIG_FB_MSM_OVERLAY0_WRITEBACK
-#define MSM_FB_OVERLAY0_WRITEBACK_SIZE roundup((1280 * 720 * 3 * 3), 4096)
+#define MSM_FB_OVERLAY0_WRITEBACK_SIZE round_up((1280 * 720 * 3 * 2), 4096)
 #else
 #define MSM_FB_OVERLAY0_WRITEBACK_SIZE (0)
 #endif  /* CONFIG_FB_MSM_OVERLAY0_WRITEBACK */
 
 #ifdef CONFIG_FB_MSM_OVERLAY1_WRITEBACK
-#define MSM_FB_OVERLAY1_WRITEBACK_SIZE roundup((1920 * 1080 * 3 * 3), 4096)
+#define MSM_FB_OVERLAY1_WRITEBACK_SIZE round_up((1920 * 1080 * 3 * 2), 4096)
 #else
 #define MSM_FB_OVERLAY1_WRITEBACK_SIZE (0)
 #endif  /* CONFIG_FB_MSM_OVERLAY1_WRITEBACK */
@@ -2432,11 +2432,7 @@ unsigned char hdmi_is_primary;
 #define MSM_ION_SF_SIZE                0x7000000 /* 112MB */
 #define MSM_ION_CAMERA_SIZE     0x5000000 /*80MB*/
 
-#ifdef CONFIG_FB_MSM_OVERLAY1_WRITEBACK
-#define MSM_ION_WB_SIZE		0x19B6000
-#else
-#define MSM_ION_WB_SIZE		0x7E9000
-#endif
+#define MSM_ION_WB_SIZE		MSM_FB_OVERLAY1_WRITEBACK_SIZE
 
 #ifdef CONFIG_QSEECOM
 #define MSM_ION_QSECOM_SIZE	0x300000 /* (3MB) */
@@ -8035,6 +8031,8 @@ static struct msm_panel_common_pdata mdp_pdata = {
 	.mem_hid = MEMTYPE_EBI1,
 #endif
 	.mdp_iommu_split_domain = 0,
+	.ov0_wb_hid = BIT(ION_CP_MM_HEAP_ID),
+	.ov1_wb_hid = BIT(ION_CP_WB_HEAP_ID),
 };
 
 static void __init reserve_mdp_memory(void)

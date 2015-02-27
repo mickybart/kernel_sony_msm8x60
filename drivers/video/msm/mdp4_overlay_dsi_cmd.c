@@ -115,8 +115,9 @@ static void mdp4_dsi_cmd_blt_ov_update(struct mdp4_overlay_pipe *pipe)
 #else
 	bpp = 3; /* overlay ouput is RGB888 */
 #endif
-	off = (pipe->ov_cnt % 3) *
-			pipe->src_height * pipe->src_width * bpp;
+	off = 0;
+	if (pipe->ov_cnt & 0x01)
+		off = pipe->src_height * pipe->src_width * bpp;
 	addr = pipe->ov_blt_addr + off;
 	/* overlay 0 */
 	overlay_base = MDP_BASE + MDP4_OVERLAYPROC0_BASE;/* 0x10000 */
@@ -137,8 +138,9 @@ static void mdp4_dsi_cmd_blt_dmap_update(struct mdp4_overlay_pipe *pipe)
 #else
 	bpp = 3; /* overlay ouput is RGB888 */
 #endif
-	off = (pipe->dmap_cnt % 3) *
-			pipe->src_height * pipe->src_width * bpp;
+	off = 0;
+	if (pipe->dmap_cnt & 0x01)
+		off = pipe->src_height * pipe->src_width * bpp;
 	addr = pipe->dma_blt_addr + off;
 
 	/* dmap */
@@ -900,9 +902,6 @@ static void mdp4_overlay_update_dsi_cmd(struct msm_fb_data_type *mfd)
 
 	/* TE enabled */
 	mdp4_mipi_vsync_enable(mfd, pipe, 0);
-
-	mdp4_overlay_mdp_pipe_req(pipe, mfd);
-	mdp4_calc_blt_mdp_bw(mfd, pipe);
 
 	MDP_OUTP(MDP_BASE + 0x021c, 10); /* read pointer */
 

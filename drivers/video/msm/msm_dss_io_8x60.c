@@ -454,8 +454,6 @@ void mipi_dsi_prepare_clocks(void)
 	clk_prepare(amp_pclk);
 	clk_prepare(dsi_m_pclk);
 	clk_prepare(dsi_s_pclk);
-	if (clk_set_rate(dsi_byte_div_clk, 1) < 0)	/* divided by 1 */
-		pr_err("%s: clk_set_rate failed\n",	__func__);
 	clk_prepare(dsi_byte_div_clk);
 	clk_prepare(dsi_esc_clk);
 }

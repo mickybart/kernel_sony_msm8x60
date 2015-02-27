@@ -190,6 +190,8 @@ struct msm_fb_data_type {
 	unsigned long rotator_iova;
 	struct mdp_buf_type *ov0_wb_buf;
 	struct mdp_buf_type *ov1_wb_buf;
+	u32 ov0_wb_hid;
+	u32 ov1_wb_hid;
 	u32 ov_start;
 	u32 mem_hid;
 	u32 mdp_rev;
