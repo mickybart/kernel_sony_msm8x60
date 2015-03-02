@@ -50,9 +50,10 @@
 #define MAX_VDD_SC		1325000 /* uV */
 #define MAX_VDD_MEM		1325000 /* uV */
 #else
-#define MAX_VDD_SC              1350000 /* uV */
+#define MAX_VDD_SC              1400000 /* uV */
 #define MIN_VDD_SC               775000 /* uV */
-#define MAX_VDD_MEM             1350000 /* uV */
+//#define MAX_VDD_MEM             1350000 /* uV */
+#define MAX_VDD_MEM             1400000 /* uV */
 #endif
 #define MAX_VDD_DIG		1200000 /* uV */
 #define MAX_AXI			 310500 /* KHz */
@@ -979,7 +980,7 @@ static void __init bus_init(void)
 #ifndef CONFIG_MACH_SEMC_NOZOMI_OC_ULTRA
 #define FREQ_TABLE_SIZE 30
 #else
-#define FREQ_TABLE_SIZE 33
+#define FREQ_TABLE_SIZE 35
 #endif
 
 static struct cpufreq_frequency_table freq_table[NR_CPUS][FREQ_TABLE_SIZE];
@@ -1153,7 +1154,11 @@ static int __init acpuclk_8x60_probe(struct platform_device *pdev)
 
 	/* Improve boot time by ramping up CPUs immediately. */
 	for_each_online_cpu(cpu)
+#ifndef CONFIG_MSM_CPU_FREQ_SET_MIN_MAX
 		acpuclk_8x60_set_rate(cpu, max_freq->acpuclk_khz, SETRATE_INIT);
+#else
+		acpuclk_8x60_set_rate(cpu, CONFIG_MSM_CPU_FREQ_MAX, SETRATE_INIT);
+#endif
 
 	acpuclk_register(&acpuclk_8x60_data);
 	cpufreq_table_init();
