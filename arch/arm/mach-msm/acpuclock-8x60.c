@@ -52,7 +52,6 @@
 #else
 #define MAX_VDD_SC              1400000 /* uV */
 #define MIN_VDD_SC               775000 /* uV */
-//#define MAX_VDD_MEM             1350000 /* uV */
 #define MAX_VDD_MEM             1400000 /* uV */
 #endif
 #define MAX_VDD_DIG		1200000 /* uV */
@@ -488,14 +487,12 @@ static struct clkctl_acpu_speed acpu_freq_tbl_oc[] = {
   { {1, 1}, 1620000, ACPU_SCPLL, 0, 0, 1, 0x1E, L2(22), 1250000, 0x03006000},
   { {1, 1}, 1674000, ACPU_SCPLL, 0, 0, 1, 0x1F, L2(22), 1275000, 0x03006000},
   { {1, 1}, 1728000, ACPU_SCPLL, 0, 0, 1, 0x20, L2(22), 1300000, 0x03006000},
-#ifdef CONFIG_MACH_SEMC_NOZOMI_OC_ULTRA
   { {1, 1}, 1782000, ACPU_SCPLL, 0, 0, 1, 0x21, L2(22), 1325000, 0x03006000},
   { {1, 1}, 1836000, ACPU_SCPLL, 0, 0, 1, 0x22, L2(22), 1337500, 0x03006000},
   { {1, 1}, 1890000, ACPU_SCPLL, 0, 0, 1, 0x23, L2(22), 1350000, 0x03006000},
   { {1, 1}, 1944000, ACPU_SCPLL, 0, 0, 1, 0x24, L2(22), 1362500, 0x03006000},
   { {1, 1}, 1998000, ACPU_SCPLL, 0, 0, 1, 0x25, L2(22), 1375000, 0x03006000},
   { {1, 1}, 2052000, ACPU_SCPLL, 0, 0, 1, 0x26, L2(22), 1400000, 0x03006000},
-#endif
   { {0, 0}, 0 },
 };
 #endif
@@ -1018,7 +1015,7 @@ static void __init bus_init(void)
 
 #ifdef CONFIG_CPU_FREQ_MSM
 
-#ifndef CONFIG_MACH_SEMC_NOZOMI_OC_ULTRA
+#ifdef CONFIG_MACH_SEMC_NOZOMI_OC_NO
 #define FREQ_TABLE_SIZE 30
 #else
 #define FREQ_TABLE_SIZE 35
