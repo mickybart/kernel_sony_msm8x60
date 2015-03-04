@@ -1088,6 +1088,7 @@ static int cpufreq_smartmax_boost_task(void *data) {
 
 			mutex_lock(&this_smartmax->timer_mutex);
 
+			cur_boost_freq = validate_freq(policy, cur_boost_freq);
 			if (policy->cur < cur_boost_freq) {
 				start_boost = true;
 				dprintk(SMARTMAX_DEBUG_BOOST, "input boost cpu %d to %d\n", cpu, cur_boost_freq);
