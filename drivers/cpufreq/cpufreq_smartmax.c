@@ -58,8 +58,7 @@ extern int tegra_input_boost (struct cpufreq_policy *policy,
  * lowering the frequency towards the ideal frequency is faster than below it.
  */
 
-#define CONFIG_CPU_FREQ_GOV_SMARTMAX_NOZOMI
-#ifdef CONFIG_CPU_FREQ_GOV_SMARTMAX_NOZOMI
+#ifdef CONFIG_MACH_SEMC_FUJI
 #define DEFAULT_SUSPEND_IDEAL_FREQ 594000
 #define DEFAULT_AWAKE_IDEAL_FREQ 1026000
 #define DEFAULT_RAMP_UP_STEP 200000
@@ -70,15 +69,8 @@ extern int tegra_input_boost (struct cpufreq_policy *policy,
 #define DEFAULT_DOWN_RATE 60000
 #define DEFAULT_SAMPLING_RATE 30000
 #define DEFAULT_INPUT_BOOST_DURATION 150000
-
-#ifdef CONFIG_MACH_SEMC_NOZOMI_OC_NO
-#define DEFAULT_TOUCH_POKE_FREQ 1512000
-#define DEFAULT_BOOST_FREQ 1512000
-#else
-#define DEFAULT_TOUCH_POKE_FREQ 1728000
-#define DEFAULT_BOOST_FREQ 1728000
-#endif
-
+#define DEFAULT_TOUCH_POKE_FREQ 2000000
+#define DEFAULT_BOOST_FREQ 2000000
 #define DEFAULT_IO_IS_BUSY 0
 #define DEFAULT_IGNORE_NICE 1
 #endif
