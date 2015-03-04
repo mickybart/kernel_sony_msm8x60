@@ -1297,9 +1297,7 @@ static int cpufreq_governor_smartmax(struct cpufreq_policy *new_policy,
 				mutex_unlock(&dbs_mutex);
 				return rc;
 			}
-#ifdef CONFIG_HAS_EARLYSUSPEND
-			register_early_suspend(&smartmax_early_suspend_handler);
-#endif
+
 			/* policy latency is in nS. Convert it to uS first */
 			latency = new_policy->cpuinfo.transition_latency / 1000;
 			if (latency == 0)
@@ -1347,9 +1345,6 @@ static int cpufreq_governor_smartmax(struct cpufreq_policy *new_policy,
 			input_unregister_mediator_secondary(&smartmax_input_mediator_handler);
 #else
 			input_unregister_handler(&dbs_input_handler);
-#endif
-#ifdef CONFIG_HAS_EARLYSUSPEND
-			unregister_early_suspend(&smartmax_early_suspend_handler);
 #endif
 		}
 		
@@ -1418,6 +1413,7 @@ static int __init cpufreq_smartmax_init(void) {
 	smartmax_early_suspend_handler.suspend = smartmax_early_suspend;
 	smartmax_early_suspend_handler.resume = smartmax_late_resume;
 	smartmax_early_suspend_handler.level = EARLY_SUSPEND_LEVEL_DISABLE_FB + 100;
+	register_early_suspend(&smartmax_early_suspend_handler);
 #endif
 	
 	return cpufreq_register_governor(&cpufreq_gov_smartmax);
@@ -1432,6 +1428,10 @@ module_init(cpufreq_smartmax_init);
 static void __exit cpufreq_smartmax_exit(void) {
 	unsigned int i;
 	struct smartmax_info_s *this_smartmax;
+
+#ifdef CONFIG_HAS_EARLYSUSPEND
+	unregister_early_suspend(&smartmax_early_suspend_handler);
+#endif
 
 	cpufreq_unregister_governor(&cpufreq_gov_smartmax);
 
