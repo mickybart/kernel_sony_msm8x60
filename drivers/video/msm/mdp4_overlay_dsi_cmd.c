@@ -490,8 +490,7 @@ void mdp4_dsi_cmd_wait4vsync(int cndx)
 
 	timestamp = vctrl->vsync_time;
 	wait_event_interruptible_timeout(vctrl->wait_queue,
-			!ktime_equal(timestamp, vctrl->vsync_time)&&
-			vctrl->vsync_enabled,
+			!ktime_equal(timestamp, vctrl->vsync_time),
 			msecs_to_jiffies(VSYNC_PERIOD * 8));
 
 	mdp4_stat.wait4vsync0++;

@@ -350,8 +350,7 @@ void mdp4_dsi_video_wait4vsync(int cndx)
 
 	timestamp = vctrl->vsync_time;
 	ret = wait_event_interruptible_timeout(vctrl->wait_queue,
-			!ktime_equal(timestamp, vctrl->vsync_time)&&
-			vctrl->vsync_irq_enabled,
+			!ktime_equal(timestamp, vctrl->vsync_time),
 			msecs_to_jiffies(VSYNC_PERIOD * 8));
 
 	if (ret <= 0)

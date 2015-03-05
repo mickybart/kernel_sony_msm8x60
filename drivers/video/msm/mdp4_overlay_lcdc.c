@@ -350,8 +350,7 @@ void mdp4_lcdc_wait4vsync(int cndx)
 	mdp4_lcdc_vsync_irq_ctrl(cndx, 1);
 
 	wait_event_interruptible_timeout(vctrl->wait_queue,
-			!ktime_equal(timestamp, vctrl->vsync_time)&&
-			vctrl->vsync_irq_enabled,
+			!ktime_equal(timestamp, vctrl->vsync_time),
 			msecs_to_jiffies(VSYNC_PERIOD * 8));
 
 	mdp4_lcdc_vsync_irq_ctrl(cndx, 0);

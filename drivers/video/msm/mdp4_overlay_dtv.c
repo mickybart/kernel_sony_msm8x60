@@ -371,8 +371,7 @@ void mdp4_dtv_wait4vsync(int cndx)
 
 	timestamp = vctrl->vsync_time;
 	wait_event_interruptible_timeout(vctrl->wait_queue,
-			!ktime_equal(timestamp, vctrl->vsync_time)&&
-			vctrl->vsync_irq_enabled,
+			!ktime_equal(timestamp, vctrl->vsync_time),
 			msecs_to_jiffies(VSYNC_PERIOD * 8));
 
 	mdp4_dtv_vsync_irq_ctrl(cndx, 0);
