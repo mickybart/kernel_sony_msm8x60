@@ -58,8 +58,7 @@ extern int tegra_input_boost (struct cpufreq_policy *policy,
  * lowering the frequency towards the ideal frequency is faster than below it.
  */
 
-#define CONFIG_CPU_FREQ_GOV_SMARTMAX_NOZOMI
-#ifdef CONFIG_CPU_FREQ_GOV_SMARTMAX_NOZOMI
+#ifdef CONFIG_MACH_SEMC_FUJI
 #define DEFAULT_SUSPEND_IDEAL_FREQ 594000
 #define DEFAULT_AWAKE_IDEAL_FREQ 1026000
 #define DEFAULT_RAMP_UP_STEP 200000
@@ -70,15 +69,8 @@ extern int tegra_input_boost (struct cpufreq_policy *policy,
 #define DEFAULT_DOWN_RATE 60000
 #define DEFAULT_SAMPLING_RATE 30000
 #define DEFAULT_INPUT_BOOST_DURATION 150000
-
-#ifdef CONFIG_MACH_SEMC_NOZOMI_OC_NO
-#define DEFAULT_TOUCH_POKE_FREQ 1512000
-#define DEFAULT_BOOST_FREQ 1512000
-#else
-#define DEFAULT_TOUCH_POKE_FREQ 1728000
-#define DEFAULT_BOOST_FREQ 1728000
-#endif
-
+#define DEFAULT_TOUCH_POKE_FREQ 2000000
+#define DEFAULT_BOOST_FREQ 2000000
 #define DEFAULT_IO_IS_BUSY 0
 #define DEFAULT_IGNORE_NICE 1
 #endif
@@ -1088,6 +1080,7 @@ static int cpufreq_smartmax_boost_task(void *data) {
 
 			mutex_lock(&this_smartmax->timer_mutex);
 
+			cur_boost_freq = validate_freq(policy, cur_boost_freq);
 			if (policy->cur < cur_boost_freq) {
 				start_boost = true;
 				dprintk(SMARTMAX_DEBUG_BOOST, "input boost cpu %d to %d\n", cpu, cur_boost_freq);
@@ -1304,9 +1297,7 @@ static int cpufreq_governor_smartmax(struct cpufreq_policy *new_policy,
 				mutex_unlock(&dbs_mutex);
 				return rc;
 			}
-#ifdef CONFIG_HAS_EARLYSUSPEND
-			register_early_suspend(&smartmax_early_suspend_handler);
-#endif
+
 			/* policy latency is in nS. Convert it to uS first */
 			latency = new_policy->cpuinfo.transition_latency / 1000;
 			if (latency == 0)
@@ -1354,9 +1345,6 @@ static int cpufreq_governor_smartmax(struct cpufreq_policy *new_policy,
 			input_unregister_mediator_secondary(&smartmax_input_mediator_handler);
 #else
 			input_unregister_handler(&dbs_input_handler);
-#endif
-#ifdef CONFIG_HAS_EARLYSUSPEND
-			unregister_early_suspend(&smartmax_early_suspend_handler);
 #endif
 		}
 		
@@ -1425,6 +1413,7 @@ static int __init cpufreq_smartmax_init(void) {
 	smartmax_early_suspend_handler.suspend = smartmax_early_suspend;
 	smartmax_early_suspend_handler.resume = smartmax_late_resume;
 	smartmax_early_suspend_handler.level = EARLY_SUSPEND_LEVEL_DISABLE_FB + 100;
+	register_early_suspend(&smartmax_early_suspend_handler);
 #endif
 	
 	return cpufreq_register_governor(&cpufreq_gov_smartmax);
@@ -1439,6 +1428,10 @@ module_init(cpufreq_smartmax_init);
 static void __exit cpufreq_smartmax_exit(void) {
 	unsigned int i;
 	struct smartmax_info_s *this_smartmax;
+
+#ifdef CONFIG_HAS_EARLYSUSPEND
+	unregister_early_suspend(&smartmax_early_suspend_handler);
+#endif
 
 	cpufreq_unregister_governor(&cpufreq_gov_smartmax);
 
