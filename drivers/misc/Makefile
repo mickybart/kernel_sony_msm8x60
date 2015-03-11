@@ -79,3 +79,4 @@ obj-$(CONFIG_TZCOM)		+= tzcom.o
 obj-$(CONFIG_SEMC_FELICA_SUPPORT) += felica.o
 obj-$(CONFIG_SEMC_ONESEG_TUNER_PM) += oneseg_tunerpm.o
 obj-$(CONFIG_SENSORS_MPU3050)	+= mpu3050/
+obj-$(CONFIG_UID_CPUTIME) += uid_cputime.o
