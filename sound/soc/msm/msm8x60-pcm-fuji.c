@@ -205,7 +205,6 @@ static int msm_pcm_playback_prepare(struct snd_pcm_substream *substream)
 		pr_debug("%s: CMD Format block failed\n", __func__);
 
 	atomic_set(&prtd->out_count, runtime->periods);
-	atomic_set(&prtd->in_count, 0);
 	
 	prtd->enabled = 1;
 	prtd->cmd_ack = 0;
@@ -235,6 +234,8 @@ static int msm_pcm_capture_prepare(struct snd_pcm_substream *substream)
 	for (i = 0; i < runtime->periods; i++)
 		q6asm_read_nolock(prtd->audio_client);
 	prtd->periods = runtime->periods;
+
+	atomic_set(&prtd->in_count, 0);
 
 	prtd->enabled = 1;
 
