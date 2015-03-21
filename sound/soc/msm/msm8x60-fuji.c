@@ -1296,14 +1296,9 @@ static const char * const voice_tx[] = {
     "voice-speaker-dmic-ef",
     "voice-speaker-dmic-bs",
     "voice-tty-headset-mic",
-    "voice-rec-mic",
-    "voice-rec-dmic-ef",
-    "voice-rec-dmic-bs",
-    "voice-rec-dmic-ef-fluence",
-    "voice-rec-dmic-bs-fluence",
 };
 static int voice_rx_dev_id[] = { 0, 3, 6, 10, 29, 8, };
-static int voice_tx_dev_id[] = { 1, 5, 4, 30, 16, 16, 17, 17, 7, 25, 16, 16, 16, 16 };
+static int voice_tx_dev_id[] = { 1, 5, 4, 30, 16, 16, 17, 17, 7 };
 
 static int msm_voice_get_rx(struct snd_kcontrol *kcontrol,
 			struct snd_ctl_elem_value *ucontrol)
