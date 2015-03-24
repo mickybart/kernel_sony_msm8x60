@@ -2820,8 +2820,6 @@ static int mdp4_calc_req_mdp_clk(struct msm_fb_data_type *mfd,
 
 	xscale -= dst_w;
 	xscale <<= shift;
-	if (op_mode & MDP4_OP_FLIP_LR)
-	    xscale *= 2;
 	xscale /= hsync;
 	pr_debug("%s: the right %d shifted xscale is %d.\n",
 		 __func__, shift, xscale);
@@ -2834,8 +2832,6 @@ static int mdp4_calc_req_mdp_clk(struct msm_fb_data_type *mfd,
 	yscale <<= shift;
 	yscale /= dst_h;
 	yscale *= src_w;
-	if (op_mode & MDP4_OP_FLIP_UD)
-	    yscale *= 2;
 	yscale /= hsync;
 
 	pr_debug("%s: the right %d shifted yscale is %d.\n",
