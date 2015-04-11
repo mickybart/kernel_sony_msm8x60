@@ -296,6 +296,12 @@ static int __devexit pm8xxx_vib_remove(struct platform_device *pdev)
 	return 0;
 }
 
+void set_vibrate(int value)
+{
+	pm8xxx_vib_enable(&vib_dev->timed_dev, value);
+}
+EXPORT_SYMBOL(set_vibrate);
+
 static struct platform_driver pm8xxx_vib_driver = {
 	.probe		= pm8xxx_vib_probe,
 	.remove		= __devexit_p(pm8xxx_vib_remove),
