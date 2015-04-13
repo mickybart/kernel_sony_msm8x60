@@ -35,6 +35,10 @@ inline int get_timer_page_address(void)
 	if (cpu_is_apq8064())
 		return APQ8064_TMR0_PHYS;
 #endif
+#ifdef CONFIG_ARCH_MSM8X60
+	if (cpu_is_msm8x60())
+		return MSM_TMR0_PHYS;
+#endif
 	return ARM_USER_ACCESSIBLE_TIMERS_INVALID_PAGE;
 }
 EXPORT_SYMBOL(get_timer_page_address);
