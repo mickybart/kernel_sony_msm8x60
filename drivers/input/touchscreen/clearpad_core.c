@@ -388,8 +388,14 @@ static unsigned long wakeup_down_time;
 static unsigned long firstly_time;
 static unsigned long pwrtrigger_time[2] = {0, 0};
 
-static void report_gesture(int gest)
+static void report_gesture(struct synaptics_clearpad *this, int gest)
 {
+	if (!gestures_switch)
+	{
+		input_report_key(this->input, KEY_POWER, true);
+		input_report_key(this->input, KEY_POWER, false);
+		return;
+	}
 	pwrtrigger_time[1] = pwrtrigger_time[0];
 	pwrtrigger_time[0] = jiffies;	
 
@@ -1375,19 +1381,16 @@ static void synaptics_funcarea_down(struct synaptics_clearpad *this,
 		break;
 	case SYN_FUNCAREA_WAKEUP:
 		LOG_EVENT(this, "wakeup\n");
-		
+		if (cur->id != 0)
+			break;
+
 		if (!wakeup_down) {
 			if (dt2w_switch
 				&& time_is_after_jiffies(firstly_time + DOUBLETAP_TIMEOUT)
 				&&  abs(last_x - cur->x) < DOUBLETAP_LIMIT
 				&&  abs(last_y - cur->y) < DOUBLETAP_LIMIT
 				&& (dt2w_switch == 2 || (cur->x > 240 && cur->x <= 479 && cur->y > 460 && cur->y <= 819))) {
-				if (gestures_switch) {
-					report_gesture(5);
-				} else {
-					input_report_key(this->input, KEY_POWER, true);
-					input_report_key(this->input, KEY_POWER, false);
-				}
+				report_gesture(this, 5);
 				wakeup_down = 2;
 				wakeup_down_time = jiffies;
 			} else {
@@ -1427,28 +1430,30 @@ static void synaptics_funcarea_up(struct synaptics_clearpad *this,
 	case SYN_FUNCAREA_WAKEUP:
 	{
 		struct synaptics_point *cur = &pointer->cur;
-		int diff_x = abs(cur->x - last_x);
-		int diff_y = abs(cur->y - last_y);
+		if (cur->id != 0)
+			break;
 
 		if (time_is_after_jiffies(firstly_time + SWEEP_TIMEOUT))
 		{
+			int diff_x = abs(cur->x - last_x);
+			int diff_y = abs(cur->y - last_y);
 			if (diff_y < S2W_Y_LIMIT && diff_x > S2W_X_NEXT)
 			{
 				if ((s2w_switch & SWEEP_RIGHT) && last_x <  S2W_X_FINAL && cur->x > S2W_X_MAX - S2W_X_FINAL)
 				{
-					report_gesture(1);
+					report_gesture(this, 1);
 				} else if ((s2w_switch & SWEEP_LEFT) && last_x >  S2W_X_MAX - S2W_X_FINAL &&  cur->x <  S2W_X_FINAL)
 				{
-					report_gesture(2);
+					report_gesture(this, 2);
 				} 
 			} else if (diff_x < S2W_X_LIMIT && diff_y > S2W_Y_NEXT)
 			{
 				if ((s2w_switch & SWEEP_UP) && last_y >  S2W_X_MAX - S2W_Y_FINAL &&  cur->y <  S2W_Y_FINAL)
 				{
-					report_gesture(3);
+					report_gesture(this, 3);
 				}else if ((s2w_switch & SWEEP_DOWN) && last_y <  S2W_Y_FINAL && cur->y > S2W_Y_MAX - S2W_Y_FINAL)
 				{
-					report_gesture(4);
+					report_gesture(this, 4);
 				}
 			}
 
