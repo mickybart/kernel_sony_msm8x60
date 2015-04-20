@@ -991,6 +991,13 @@ config TOUCHSCREEN_CLEARPAD_I2C
         help
           Say Y here to enable Synaptics ClearPad I2C touchscreen.
 
+config TOUCHSCREEN_CLEARPAD_WAKEUP
+	tristate "Synaptics ClearPad WakeUp"
+	depends on TOUCHSCREEN_CLEARPAD
+	default n
+	help
+	  Say Y here to enable WakeUp interface support.
+
 config TOUCHSCREEN_CLEARPAD_RMI_DEV
         tristate "Synaptics ClearPad RMI Dev"
 	depends on GPIO_SYSFS && TOUCHSCREEN_CLEARPAD && TOUCHSCREEN_CLEARPAD_I2C
