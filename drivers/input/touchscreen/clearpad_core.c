@@ -355,25 +355,31 @@ struct synaptics_clearpad {
 #endif
 };
 
-#define WAKE_GESTURE		0x0b
+#define WAKE_GESTURE			0x0b
+#define WAKE_Y_MAX			1280
+#define WAKE_X_MAX			720
 #define SWEEP_TIMEOUT		30
 #define DOUBLETAP_TIMEOUT		HZ / 5
 #define DOUBLETAP_LIMIT		100
+#define DOUBLETAP_AREA_X1		240
+#define DOUBLETAP_AREA_Y1		460
+#define DOUBLETAP_AREA_X2		WAKE_X_MAX - DOUBLETAP_AREA_X1 - 1
+#define DOUBLETAP_AREA_Y2		WAKE_Y_MAX - DOUBLETAP_AREA_Y1 - 1
 #define TRIGGER_TIMEOUT		50
-#define S2W_Y_MAX		1280
-#define S2W_X_MAX		720
-#define S2W_X_NEXT		300
-#define S2W_Y_NEXT		400
-#define S2W_X_LIMIT		150
-#define S2W_Y_LIMIT		100
-#define S2W_X_FINAL		200
-#define S2W_Y_FINAL		400
-#define WAKE_GESTURE		0x0b
-#define SWEEP_RIGHT		0x01
-#define SWEEP_LEFT		0x02
-#define SWEEP_UP		0x04
-#define SWEEP_DOWN		0x08
-#define VIB_STRENGTH		20
+#define S2W_X_NEXT			300
+#define S2W_Y_NEXT			400
+#define S2W_X_LIMIT			150
+#define S2W_Y_LIMIT			100
+#define S2W_AREA_X1			200
+#define S2W_AREA_Y1			300
+#define S2W_AREA_X2			WAKE_X_MAX - S2W_AREA_X1 - 1
+#define S2W_AREA_Y2			WAKE_Y_MAX - S2W_AREA_Y1 - 1
+#define WAKE_GESTURE			0x0b
+#define SWEEP_RIGHT			0x01
+#define SWEEP_LEFT			0x02
+#define SWEEP_UP			0x04
+#define SWEEP_DOWN			0x08
+#define VIB_STRENGTH			20
 
 static struct kobject *android_touch_kobj;
 static bool gestures_switch = false;
@@ -1389,7 +1395,8 @@ static void synaptics_funcarea_down(struct synaptics_clearpad *this,
 				&& time_is_after_jiffies(firstly_time + DOUBLETAP_TIMEOUT)
 				&&  abs(last_x - cur->x) < DOUBLETAP_LIMIT
 				&&  abs(last_y - cur->y) < DOUBLETAP_LIMIT
-				&& (dt2w_switch == 2 || (cur->x > 240 && cur->x <= 479 && cur->y > 460 && cur->y <= 819))) {
+				&& (dt2w_switch == 2 || (cur->x > DOUBLETAP_AREA_X1 && cur->x <= DOUBLETAP_AREA_X2 
+					&& cur->y > DOUBLETAP_AREA_Y1 && cur->y <= DOUBLETAP_AREA_Y2))) {
 				report_gesture(this, 5);
 				wakeup_down = 2;
 				wakeup_down_time = jiffies;
@@ -1439,19 +1446,19 @@ static void synaptics_funcarea_up(struct synaptics_clearpad *this,
 			int diff_y = abs(cur->y - last_y);
 			if (diff_y < S2W_Y_LIMIT && diff_x > S2W_X_NEXT)
 			{
-				if ((s2w_switch & SWEEP_RIGHT) && last_x <  S2W_X_FINAL && cur->x > S2W_X_MAX - S2W_X_FINAL)
+				if ((s2w_switch & SWEEP_RIGHT) && last_x <  S2W_AREA_X1 && cur->x > S2W_AREA_X2)
 				{
 					report_gesture(this, 1);
-				} else if ((s2w_switch & SWEEP_LEFT) && last_x >  S2W_X_MAX - S2W_X_FINAL &&  cur->x <  S2W_X_FINAL)
+				} else if ((s2w_switch & SWEEP_LEFT) && last_x >  S2W_AREA_X2 &&  cur->x <  S2W_AREA_X1)
 				{
 					report_gesture(this, 2);
 				} 
 			} else if (diff_x < S2W_X_LIMIT && diff_y > S2W_Y_NEXT)
 			{
-				if ((s2w_switch & SWEEP_UP) && last_y >  S2W_X_MAX - S2W_Y_FINAL &&  cur->y <  S2W_Y_FINAL)
+				if ((s2w_switch & SWEEP_UP) && last_y >  S2W_AREA_Y2 &&  cur->y <  S2W_AREA_Y1)
 				{
 					report_gesture(this, 3);
-				}else if ((s2w_switch & SWEEP_DOWN) && last_y <  S2W_Y_FINAL && cur->y > S2W_Y_MAX - S2W_Y_FINAL)
+				}else if ((s2w_switch & SWEEP_DOWN) && last_y <  S2W_AREA_Y1 && cur->y > S2W_AREA_Y2)
 				{
 					report_gesture(this, 4);
 				}
@@ -2302,7 +2309,7 @@ static int synaptics_clearpad_pm_suspend(struct device *dev)
 		 this->active, task_name[this->task]);
 	UNLOCK(this);
 
-	if (!(s2w_switch || dt2w_switch || gestures_switch))
+	if (!(s2w_switch || dt2w_switch))
 	    rc = synaptics_clearpad_set_power(this);
 	return rc;
 }
@@ -2335,7 +2342,7 @@ static int synaptics_clearpad_suspend(struct device *dev)
 	rc = synaptics_clearpad_pm_suspend(&this->pdev->dev);
 #endif
 
-	if ((s2w_switch || dt2w_switch || gestures_switch)) {
+	if (s2w_switch || dt2w_switch) {
 		disable_irq(this->pdata->irq);
 		if (device_may_wakeup(dev))
 			enable_irq_wake(this->pdata->irq);
@@ -2349,7 +2356,7 @@ static int synaptics_clearpad_resume(struct device *dev)
 	struct synaptics_clearpad *this = dev_get_drvdata(dev);
 	int rc = 0;
 
-	if ((s2w_switch || dt2w_switch || gestures_switch)) {
+	if (s2w_switch || dt2w_switch) {
 		if (device_may_wakeup(dev))
 			disable_irq_wake(this->pdata->irq);
 		enable_irq(this->pdata->irq);
