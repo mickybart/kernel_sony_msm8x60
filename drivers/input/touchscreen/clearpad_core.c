@@ -320,6 +320,42 @@ static const u8 f54_commands[] = {
 	[F54_AUTOSCAN_REPORT]	= 0x03,
 };
 
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
+#define WAKE_GESTURE		0x0b
+#define SWEEP_TIMEOUT		30
+#define DOUBLETAP_TIMEOUT		HZ / 5
+#define DOUBLETAP_LIMIT		100
+#define TRIGGER_TIMEOUT		50
+#define S2W_Y_MAX		1280
+#define S2W_X_MAX		720
+#define S2W_X_NEXT		300
+#define S2W_Y_NEXT		400
+#define S2W_X_LIMIT		150
+#define S2W_Y_LIMIT		100
+#define S2W_X_FINAL		200
+#define S2W_Y_FINAL		400
+#define SWEEP_RIGHT		0x01
+#define SWEEP_LEFT		0x02
+#define SWEEP_UP		0x04
+#define SWEEP_DOWN		0x08
+#define VIB_STRENGTH		20
+#define ANDROID_TOUCH		"android_touch"
+
+struct synaptics_wakeup {
+	struct input_dev *input;
+	bool gestures_switch;
+	int s2w_switch;
+	int dt2w_switch;
+	int vib_strength;
+	int last_x;
+	int last_y;
+	int down;
+	unsigned long down_time;
+	unsigned long firstly_time;
+	unsigned long pwrtrigger_time[2];
+};
+#endif
+
 struct synaptics_clearpad {
 	enum   synaptics_state state;
 	enum   synaptics_task task;
@@ -355,60 +391,30 @@ struct synaptics_clearpad {
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *debugfs;
 #endif
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
+	struct synaptics_wakeup wakeup;
+#endif
 };
 
 #ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
-#define WAKE_GESTURE		0x0b
-#define SWEEP_TIMEOUT		30
-#define DOUBLETAP_TIMEOUT		HZ / 5
-#define DOUBLETAP_LIMIT		100
-#define TRIGGER_TIMEOUT		50
-#define S2W_Y_MAX		1280
-#define S2W_X_MAX		720
-#define S2W_X_NEXT		300
-#define S2W_Y_NEXT		400
-#define S2W_X_LIMIT		150
-#define S2W_Y_LIMIT		100
-#define S2W_X_FINAL		200
-#define S2W_Y_FINAL		400
-#define WAKE_GESTURE		0x0b
-#define SWEEP_RIGHT		0x01
-#define SWEEP_LEFT		0x02
-#define SWEEP_UP		0x04
-#define SWEEP_DOWN		0x08
-#define VIB_STRENGTH		20
-
-static struct kobject *android_touch_kobj;
-static bool gestures_switch = false;
-static int s2w_switch = 0;
-static int dt2w_switch = 0;
-static int vib_strength = VIB_STRENGTH;
-static struct input_dev *gesture_dev;
-static int last_x;
-static int last_y;
-static int wakeup_down;
-static unsigned long wakeup_down_time;
-static unsigned long firstly_time;
-static unsigned long pwrtrigger_time[2] = {0, 0};
-
-static void report_gesture(struct synaptics_clearpad *this, int gest)
+static void synaptics_report_gesture(struct synaptics_clearpad *this, int gest)
 {
-	if (!gestures_switch)
+	if (!this->wakeup.gestures_switch)
 	{
-		input_report_key(this->input, KEY_POWER, true);
-		input_report_key(this->input, KEY_POWER, false);
+		input_report_key(this->input, KEY_POWER, 1);
+		input_report_key(this->input, KEY_POWER, 0);
 		return;
 	}
-	pwrtrigger_time[1] = pwrtrigger_time[0];
-	pwrtrigger_time[0] = jiffies;	
+	this->wakeup.pwrtrigger_time[1] = this->wakeup.pwrtrigger_time[0];
+	this->wakeup.pwrtrigger_time[0] = jiffies;
 
-	if (pwrtrigger_time[0] - pwrtrigger_time[1] < TRIGGER_TIMEOUT)
+	if (this->wakeup.pwrtrigger_time[0] - this->wakeup.pwrtrigger_time[1] < TRIGGER_TIMEOUT)
 		return;
 
 	printk("WG: gesture = %d\n", gest);
-	input_report_rel(gesture_dev, WAKE_GESTURE, gest);
-	input_sync(gesture_dev);
-	set_vibrate(vib_strength);
+	input_report_rel(this->wakeup.input, WAKE_GESTURE, gest);
+	input_sync(this->wakeup.input);
+	set_vibrate(this->wakeup.vib_strength);
 }
 #endif
 
@@ -1393,21 +1399,21 @@ static void synaptics_funcarea_down(struct synaptics_clearpad *this,
 		if (cur->id != 0)
 			break;
 
-		if (!wakeup_down) {
-			if (dt2w_switch
-				&& time_is_after_jiffies(firstly_time + DOUBLETAP_TIMEOUT)
-				&&  abs(last_x - cur->x) < DOUBLETAP_LIMIT
-				&&  abs(last_y - cur->y) < DOUBLETAP_LIMIT
-				&& (dt2w_switch == 2 || (cur->x > 240 && cur->x <= 479 && cur->y > 460 && cur->y <= 819))) {
-				report_gesture(this, 5);
-				wakeup_down = 2;
-				wakeup_down_time = jiffies;
+		if (!this->wakeup.down) {
+			if (this->wakeup.dt2w_switch
+				&& time_is_after_jiffies(this->wakeup.firstly_time + DOUBLETAP_TIMEOUT)
+				&&  abs(this->wakeup.last_x - cur->x) < DOUBLETAP_LIMIT
+				&&  abs(this->wakeup.last_y - cur->y) < DOUBLETAP_LIMIT
+				&& (this->wakeup.dt2w_switch == 2 || (cur->x > 240 && cur->x <= 479 && cur->y > 460 && cur->y <= 819))) {
+				synaptics_report_gesture(this, 5);
+				this->wakeup.down = 2;
+				this->wakeup.down_time = jiffies;
 			} else {
-				wakeup_down = 1;
-				firstly_time = jiffies;
+				this->wakeup.down = 1;
+				this->wakeup.firstly_time = jiffies;
 			}
-			last_x = cur->x;
-			last_y = cur->y;
+			this->wakeup.last_x = cur->x;
+			this->wakeup.last_y = cur->y;
 		}
 		break;
 #endif
@@ -1444,33 +1450,33 @@ static void synaptics_funcarea_up(struct synaptics_clearpad *this,
 		if (cur->id != 0)
 			break;
 
-		if (time_is_after_jiffies(firstly_time + SWEEP_TIMEOUT))
+		if (time_is_after_jiffies(this->wakeup.firstly_time + SWEEP_TIMEOUT))
 		{
-			int diff_x = abs(cur->x - last_x);
-			int diff_y = abs(cur->y - last_y);
+			int diff_x = abs(cur->x - this->wakeup.last_x);
+			int diff_y = abs(cur->y - this->wakeup.last_y);
 			if (diff_y < S2W_Y_LIMIT && diff_x > S2W_X_NEXT)
 			{
-				if ((s2w_switch & SWEEP_RIGHT) && last_x <  S2W_X_FINAL && cur->x > S2W_X_MAX - S2W_X_FINAL)
+				if ((this->wakeup.s2w_switch & SWEEP_RIGHT) && this->wakeup.last_x <  S2W_X_FINAL && cur->x > S2W_X_MAX - S2W_X_FINAL)
 				{
-					report_gesture(this, 1);
-				} else if ((s2w_switch & SWEEP_LEFT) && last_x >  S2W_X_MAX - S2W_X_FINAL &&  cur->x <  S2W_X_FINAL)
+					synaptics_report_gesture(this, 1);
+				} else if ((this->wakeup.s2w_switch & SWEEP_LEFT) && this->wakeup.last_x >  S2W_X_MAX - S2W_X_FINAL &&  cur->x <  S2W_X_FINAL)
 				{
-					report_gesture(this, 2);
+					synaptics_report_gesture(this, 2);
 				} 
 			} else if (diff_x < S2W_X_LIMIT && diff_y > S2W_Y_NEXT)
 			{
-				if ((s2w_switch & SWEEP_UP) && last_y >  S2W_X_MAX - S2W_Y_FINAL &&  cur->y <  S2W_Y_FINAL)
+				if ((this->wakeup.s2w_switch & SWEEP_UP) && this->wakeup.last_y >  S2W_X_MAX - S2W_Y_FINAL &&  cur->y <  S2W_Y_FINAL)
 				{
-					report_gesture(this, 3);
-				}else if ((s2w_switch & SWEEP_DOWN) && last_y <  S2W_Y_FINAL && cur->y > S2W_Y_MAX - S2W_Y_FINAL)
+					synaptics_report_gesture(this, 3);
+				}else if ((this->wakeup.s2w_switch & SWEEP_DOWN) && this->wakeup.last_y <  S2W_Y_FINAL && cur->y > S2W_Y_MAX - S2W_Y_FINAL)
 				{
-					report_gesture(this, 4);
+					synaptics_report_gesture(this, 4);
 				}
 			}
 
 		}
-		if (wakeup_down) {
-			wakeup_down = 0;
+		if (this->wakeup.down) {
+			this->wakeup.down = 0;
 		} 
 	}
 	    break;
@@ -2141,10 +2147,12 @@ static ssize_t synaptics_wake_gestures_store(struct device *dev,
 		struct device_attribute *attr,
 		const char *buf, size_t size)
 {
+	struct synaptics_clearpad *this = dev_get_drvdata(dev);
+	
 	if (sysfs_streq(buf, "0")) {
-		gestures_switch = false;
+		this->wakeup.gestures_switch = false;
 	} else {
-		gestures_switch = true;
+		this->wakeup.gestures_switch = true;
 	}
 
 	return size;
@@ -2153,17 +2161,21 @@ static ssize_t synaptics_wake_gestures_store(struct device *dev,
 static ssize_t synaptics_wake_gestures_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
+	struct synaptics_clearpad *this = dev_get_drvdata(dev);
+	
 	size_t count = 0;
-	count += sprintf(buf, "%d\n", gestures_switch);
+	count += sprintf(buf, "%d\n", this->wakeup.gestures_switch);
 	return count;
 }
 
 static ssize_t synaptics_sweep2wake_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
-	sscanf(buf, "%d ", &s2w_switch);
-	if (s2w_switch < 0 || s2w_switch > 15)
-		s2w_switch = 15;
+	struct synaptics_clearpad *this = dev_get_drvdata(dev);
+	
+	sscanf(buf, "%d ", &this->wakeup.s2w_switch);
+	if (this->wakeup.s2w_switch < 0 || this->wakeup.s2w_switch > 15)
+		this->wakeup.s2w_switch = 15;
 
 	return count;
 }
@@ -2171,17 +2183,21 @@ static ssize_t synaptics_sweep2wake_store(struct device *dev,
 static ssize_t synaptics_sweep2wake_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
+	struct synaptics_clearpad *this = dev_get_drvdata(dev);
+	
 	size_t count = 0;
-	count += sprintf(buf, "%d\n", s2w_switch);
+	count += sprintf(buf, "%d\n", this->wakeup.s2w_switch);
 	return count;
 }
 
 static ssize_t synaptics_doubletap2wake_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
-	sscanf(buf, "%d ", &dt2w_switch);
-	if (dt2w_switch < 0 || dt2w_switch > 15)
-		dt2w_switch = 15;
+	struct synaptics_clearpad *this = dev_get_drvdata(dev);
+	
+	sscanf(buf, "%d ", &this->wakeup.dt2w_switch);
+	if (this->wakeup.dt2w_switch < 0 || this->wakeup.dt2w_switch > 15)
+		this->wakeup.dt2w_switch = 15;
 
 	return count;
 }
@@ -2189,17 +2205,21 @@ static ssize_t synaptics_doubletap2wake_store(struct device *dev,
 static ssize_t synaptics_doubletap2wake_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
+	struct synaptics_clearpad *this = dev_get_drvdata(dev);
+	
 	size_t count = 0;
-	count += sprintf(buf, "%d\n", dt2w_switch);
+	count += sprintf(buf, "%d\n", this->wakeup.dt2w_switch);
 	return count;
 }
 
 static ssize_t synaptics_vib_strength_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
-	sscanf(buf, "%d ", &vib_strength);
-	if (vib_strength < 0 || vib_strength > 90)
-		vib_strength = 20;
+	struct synaptics_clearpad *this = dev_get_drvdata(dev);
+	
+	sscanf(buf, "%d ", &this->wakeup.vib_strength);
+	if (this->wakeup.vib_strength < 0 || this->wakeup.vib_strength > 90)
+		this->wakeup.vib_strength = VIB_STRENGTH;
 
 	return count;
 }
@@ -2207,8 +2227,10 @@ static ssize_t synaptics_vib_strength_store(struct device *dev,
 static ssize_t synaptics_vib_strength_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
+	struct synaptics_clearpad *this = dev_get_drvdata(dev);
+	
 	size_t count = 0;
-	count += sprintf(buf, "%d\n", vib_strength);
+	count += sprintf(buf, "%d\n", this->wakeup.vib_strength);
 	return count;
 }
 #endif
@@ -2292,11 +2314,11 @@ static int synaptics_clearpad_input_init(struct synaptics_clearpad *this)
 	}
 
 #ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
-	gesture_dev = input_allocate_device();
-	gesture_dev->name = "wake_gesture";
-	gesture_dev->phys = "wake_gesture/input0";
-	input_set_capability(gesture_dev, EV_REL, WAKE_GESTURE);
-	rc = input_register_device(gesture_dev);
+	this->wakeup.input = input_allocate_device();
+	this->wakeup.input->name = "wake_gesture";
+	this->wakeup.input->phys = "wake_gesture/input0";
+	input_set_capability(this->wakeup.input, EV_REL, WAKE_GESTURE);
+	rc = input_register_device(this->wakeup.input);
 	if (rc) {
 		pr_err("%s: input_register_device err=%d\n", __func__, rc);
 	}
@@ -2323,7 +2345,7 @@ static int synaptics_clearpad_pm_suspend(struct device *dev)
 	UNLOCK(this);
 
 #ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
-	if (!(s2w_switch || dt2w_switch || gestures_switch))
+	if (!(this->wakeup.s2w_switch || this->wakeup.dt2w_switch || this->wakeup.gestures_switch))
 		rc = synaptics_clearpad_set_power(this);
 #else
 	rc = synaptics_clearpad_set_power(this);
@@ -2361,7 +2383,7 @@ static int synaptics_clearpad_suspend(struct device *dev)
 	rc = synaptics_clearpad_pm_suspend(&this->pdev->dev);
 #endif
 
-	if ((s2w_switch || dt2w_switch || gestures_switch)) {
+	if ((this->wakeup.s2w_switch || this->wakeup.dt2w_switch || this->wakeup.gestures_switch)) {
 		disable_irq(this->pdata->irq);
 		if (device_may_wakeup(dev))
 			enable_irq_wake(this->pdata->irq);
@@ -2375,7 +2397,7 @@ static int synaptics_clearpad_resume(struct device *dev)
 	struct synaptics_clearpad *this = dev_get_drvdata(dev);
 	int rc = 0;
 
-	if ((s2w_switch || dt2w_switch || gestures_switch)) {
+	if ((this->wakeup.s2w_switch || this->wakeup.dt2w_switch || this->wakeup.gestures_switch)) {
 		if (device_may_wakeup(dev))
 			disable_irq_wake(this->pdata->irq);
 		enable_irq(this->pdata->irq);
@@ -2398,7 +2420,7 @@ static void synaptics_clearpad_early_suspend(struct early_suspend *handler)
 	dev_info(&this->pdev->dev, "early suspend\n");
 	synaptics_clearpad_pm_suspend(&this->pdev->dev);
 #ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
-	wakeup_down_time = jiffies;
+	this->wakeup.down_time = jiffies;
 #endif
 }
 
@@ -2848,6 +2870,14 @@ static int __devinit clearpad_probe(struct platform_device *pdev)
 		goto err_irq;
 
 #ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
+	rc = sysfs_create_link(NULL, &this->input->dev.kobj, ANDROID_TOUCH);
+	if (rc) {
+		pr_warn("%s: sysfs_create_link failed for android_touch\n", __func__);
+	}
+	
+	this->wakeup.gestures_switch = false;
+	this->wakeup.vib_strength = VIB_STRENGTH;
+	
 	device_init_wakeup(&this->pdev->dev, true);
 #endif
 
@@ -2901,6 +2931,12 @@ static int __devexit clearpad_remove(struct platform_device *pdev)
 #ifdef CONFIG_TOUCHSCREEN_CLEARPAD_RMI_DEV
 	platform_device_put(this->rmi_dev);
 #endif
+
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
+	input_unregister_device(this->wakeup.input);
+	sysfs_remove_link(NULL, ANDROID_TOUCH);
+#endif
+
 	dev_set_drvdata(&pdev->dev, NULL);
 	kfree(this);
 
@@ -2932,41 +2968,11 @@ static struct platform_driver clearpad_driver = {
 
 static int __init clearpad_init(void)
 {
-#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
-	int rc = 0;
-	android_touch_kobj = kobject_create_and_add("android_touch", NULL) ;
-	if (android_touch_kobj == NULL) {
-		pr_warn("%s: android_touch_kobj create_and_add failed\n", __func__);
-	}
-	rc = sysfs_create_file(android_touch_kobj, &dev_attr_wake_gestures.attr);
-	if (rc) {
-		pr_warn("%s: sysfs_create_file failed for wake_gestures\n", __func__);
-	}
-	rc = sysfs_create_file(android_touch_kobj, &dev_attr_doubletap2wake.attr);
-	if (rc) {
-		pr_warn("%s: sysfs_create_file failed for doubletap2wake\n", __func__);
-	}
-	rc = sysfs_create_file(android_touch_kobj, &dev_attr_sweep2wake.attr);
-	if (rc) {
-		pr_warn("%s: sysfs_create_file failed for sweep2wake.attr\n", __func__);
-	}
-	rc = sysfs_create_file(android_touch_kobj, &dev_attr_vib_strength.attr);
-	if (rc) {
-		pr_warn("%s: sysfs_create_file failed for vib_strength\n", __func__);
-	}
-#endif
 	return platform_driver_register(&clearpad_driver);
 }
 
 static void __exit clearpad_exit(void)
 {
-#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
-	sysfs_remove_file(android_touch_kobj, &dev_attr_sweep2wake.attr);
-	sysfs_remove_file(android_touch_kobj, &dev_attr_doubletap2wake.attr);
-	sysfs_remove_file(android_touch_kobj, &dev_attr_wake_gestures.attr);
-	sysfs_remove_file(android_touch_kobj, &dev_attr_vib_strength.attr);
-	kobject_del(android_touch_kobj);
-#endif
 	platform_driver_unregister(&clearpad_driver);
 }
 
