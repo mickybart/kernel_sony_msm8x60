@@ -37,7 +37,9 @@
 #ifdef CONFIG_ARM
 #include <asm/mach-types.h>
 #endif
- #include <linux/mfd/pm8xxx/vibrator.h>
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
+#include <linux/mfd/pm8xxx/vibrator.h>
+#endif
 
 #define SYNAPTICS_CLEARPAD_VENDOR		0x1
 #define SYNAPTICS_MAX_N_FINGERS			10
@@ -359,6 +361,7 @@ struct synaptics_clearpad {
 #endif
 };
 
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
 #define WAKE_GESTURE		0x0b
 #define SWEEP_TIMEOUT		30
 #define DOUBLETAP_TIMEOUT		HZ / 5
@@ -411,6 +414,7 @@ static void report_gesture(struct synaptics_clearpad *this, int gest)
 	input_sync(gesture_dev);
 	set_vibrate(vib_strength);
 }
+#endif
 
 static void synaptics_funcarea_initialize(struct synaptics_clearpad *this);
 
@@ -1268,9 +1272,11 @@ static void synaptics_funcarea_initialize(struct synaptics_clearpad *this)
 			button = (struct synaptics_button_data *)funcarea->data;
 			input_set_capability(this->input, EV_KEY, button->code);
 			break;
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
 		case SYN_FUNCAREA_WAKEUP:
 			input_set_capability(this->input, EV_KEY, KEY_POWER);
 			break;
+#endif
 		default:
 			continue;
 		}
@@ -1303,6 +1309,7 @@ synaptics_funcarea_search(struct synaptics_clearpad *this,
 
 	/* get new funcarea */
 	for ( ; funcarea->func != SYN_FUNCAREA_END; funcarea++) {
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
 		if (this->active & (SYN_STANDBY | SYN_STANDBY_AFTER_TASK)) {
 			if (funcarea->func != SYN_FUNCAREA_WAKEUP)
 				continue;
@@ -1310,6 +1317,7 @@ synaptics_funcarea_search(struct synaptics_clearpad *this,
 			if (funcarea->func == SYN_FUNCAREA_WAKEUP)
 				continue;
 		}
+#endif
 		if (synaptics_funcarea_test(&funcarea->original,
 						&pointer->cur))
 			return funcarea;
@@ -1383,6 +1391,7 @@ static void synaptics_funcarea_down(struct synaptics_clearpad *this,
 		if (button)
 			button->down = true;
 		break;
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
 	case SYN_FUNCAREA_WAKEUP:
 		LOG_EVENT(this, "wakeup\n");
 		if (cur->id != 0)
@@ -1405,6 +1414,7 @@ static void synaptics_funcarea_down(struct synaptics_clearpad *this,
 			last_y = cur->y;
 		}
 		break;
+#endif
 	default:
 		break;
 	}
@@ -1431,6 +1441,7 @@ static void synaptics_funcarea_up(struct synaptics_clearpad *this,
 		if (button)
 			button->down = false;
 		break;
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
 	case SYN_FUNCAREA_WAKEUP:
 	{
 		struct synaptics_point *cur = &pointer->cur;
@@ -1467,6 +1478,7 @@ static void synaptics_funcarea_up(struct synaptics_clearpad *this,
 		} 
 	}
 	    break;
+#endif
 	default:
 		break;
 	}
@@ -2128,6 +2140,7 @@ end:
 	return strnlen(buf, PAGE_SIZE);
 }
 
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
 static ssize_t synaptics_wake_gestures_store(struct device *dev,
 		struct device_attribute *attr,
 		const char *buf, size_t size)
@@ -2202,6 +2215,7 @@ static ssize_t synaptics_vib_strength_show(struct device *dev,
 	count += sprintf(buf, "%d\n", vib_strength);
 	return count;
 }
+#endif
 
 static DEVICE_ATTR(fwinfo, 0600, synaptics_clearpad_state_show, 0);
 static DEVICE_ATTR(fwfamily, 0600, synaptics_clearpad_state_show, 0);
@@ -2211,11 +2225,13 @@ static DEVICE_ATTR(fwstate, 0600, synaptics_clearpad_state_show, 0);
 static DEVICE_ATTR(fwflush, 0600, 0, synaptics_clearpad_fwflush_store);
 static DEVICE_ATTR(touchcmd, 0600, 0, synaptics_clearpad_touchcmd_store);
 static DEVICE_ATTR(enabled, 0600, 0, synaptics_clearpad_enabled_store);
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
 static DEVICE_ATTR(wakeup, 0644, synaptics_doubletap2wake_show, synaptics_doubletap2wake_store);
 static DEVICE_ATTR(wake_gestures, 0644, synaptics_wake_gestures_show, synaptics_wake_gestures_store);
 static DEVICE_ATTR(doubletap2wake, 0644, synaptics_doubletap2wake_show, synaptics_doubletap2wake_store); 
 static DEVICE_ATTR(sweep2wake, 0644, synaptics_sweep2wake_show, synaptics_sweep2wake_store); 
 static DEVICE_ATTR(vib_strength, 0644, synaptics_vib_strength_show, synaptics_vib_strength_store); 
+#endif
 
 static struct attribute *synaptics_clearpad_attributes[] = {
 	&dev_attr_fwinfo.attr,
@@ -2226,11 +2242,13 @@ static struct attribute *synaptics_clearpad_attributes[] = {
 	&dev_attr_fwflush.attr,
 	&dev_attr_touchcmd.attr,
 	&dev_attr_enabled.attr,
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
 	&dev_attr_wakeup.attr,
 	&dev_attr_wake_gestures.attr,
 	&dev_attr_doubletap2wake.attr,
 	&dev_attr_sweep2wake.attr,
 	&dev_attr_vib_strength.attr,
+#endif
 	NULL
 };
 
@@ -2276,7 +2294,8 @@ static int synaptics_clearpad_input_init(struct synaptics_clearpad *this)
 		input_set_drvdata(this->input, NULL);
 		input_free_device(this->input);
 	}
-	
+
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
 	gesture_dev = input_allocate_device();
 	gesture_dev->name = "wake_gesture";
 	gesture_dev->phys = "wake_gesture/input0";
@@ -2285,6 +2304,7 @@ static int synaptics_clearpad_input_init(struct synaptics_clearpad *this)
 	if (rc) {
 		pr_err("%s: input_register_device err=%d\n", __func__, rc);
 	}
+#endif
 
 	return rc;
 }
@@ -2306,8 +2326,13 @@ static int synaptics_clearpad_pm_suspend(struct device *dev)
 		 this->active, task_name[this->task]);
 	UNLOCK(this);
 
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
 	if (!(s2w_switch || dt2w_switch || gestures_switch))
-	    rc = synaptics_clearpad_set_power(this);
+		rc = synaptics_clearpad_set_power(this);
+#else
+	rc = synaptics_clearpad_set_power(this);
+#endif
+	
 	return rc;
 }
 
@@ -2330,6 +2355,7 @@ static int synaptics_clearpad_pm_resume(struct device *dev)
 	return rc;
 }
 
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
 static int synaptics_clearpad_suspend(struct device *dev)
 {
 	struct synaptics_clearpad *this = dev_get_drvdata(dev);
@@ -2357,6 +2383,7 @@ static int synaptics_clearpad_resume(struct device *dev)
 
 	return rc;
 }
+#endif
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 static void synaptics_clearpad_early_suspend(struct early_suspend *handler)
@@ -2366,7 +2393,9 @@ static void synaptics_clearpad_early_suspend(struct early_suspend *handler)
 
 	dev_info(&this->pdev->dev, "early suspend\n");
 	synaptics_clearpad_pm_suspend(&this->pdev->dev);
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
 	wakeup_down_time = jiffies;
+#endif
 }
 
 static void synaptics_clearpad_late_resume(struct early_suspend *handler)
@@ -2841,7 +2870,9 @@ static int __devinit clearpad_probe(struct platform_device *pdev)
 	if (rc)
 		goto err_irq;
 
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
 	device_init_wakeup(&this->pdev->dev, true);
+#endif
 
 	return 0;
 
@@ -2901,8 +2932,15 @@ static int __devexit clearpad_remove(struct platform_device *pdev)
 
 
 static const struct dev_pm_ops synaptics_clearpad_pm = {
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
 	.suspend = synaptics_clearpad_suspend,
 	.resume = synaptics_clearpad_resume,
+#else
+#ifndef CONFIG_HAS_EARLYSUSPEND
+	.suspend = synaptics_clearpad_pm_suspend,
+	.resume = synaptics_clearpad_pm_resume,
+#endif
+#endif
 };
 
 static struct platform_driver clearpad_driver = {
@@ -2917,6 +2955,7 @@ static struct platform_driver clearpad_driver = {
 
 static int __init clearpad_init(void)
 {
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
 	int rc = 0;
 	android_touch_kobj = kobject_create_and_add("android_touch", NULL) ;
 	if (android_touch_kobj == NULL) {
@@ -2938,16 +2977,19 @@ static int __init clearpad_init(void)
 	if (rc) {
 		pr_warn("%s: sysfs_create_file failed for vib_strength\n", __func__);
 	}
+#endif
 	return platform_driver_register(&clearpad_driver);
 }
 
 static void __exit clearpad_exit(void)
 {
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
 	sysfs_remove_file(android_touch_kobj, &dev_attr_sweep2wake.attr);
 	sysfs_remove_file(android_touch_kobj, &dev_attr_doubletap2wake.attr);
 	sysfs_remove_file(android_touch_kobj, &dev_attr_wake_gestures.attr);
 	sysfs_remove_file(android_touch_kobj, &dev_attr_vib_strength.attr);
 	kobject_del(android_touch_kobj);
+#endif
 	platform_driver_unregister(&clearpad_driver);
 }
 
