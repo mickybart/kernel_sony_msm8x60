@@ -324,18 +324,24 @@ static const u8 f54_commands[] = {
 
 #ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
 #define WAKE_GESTURE		0x0b
+#define WAKE_Y_MAX		1280
+#define WAKE_X_MAX		720
 #define SWEEP_TIMEOUT		30
-#define DOUBLETAP_TIMEOUT		HZ / 5
+#define DOUBLETAP_TIMEOUT	HZ / 5
 #define DOUBLETAP_LIMIT		100
+#define DOUBLETAP_AREA_X1	240
+#define DOUBLETAP_AREA_Y1	460
+#define DOUBLETAP_AREA_X2	WAKE_X_MAX - DOUBLETAP_AREA_X1 - 1
+#define DOUBLETAP_AREA_Y2	WAKE_Y_MAX - DOUBLETAP_AREA_Y1 - 1
 #define TRIGGER_TIMEOUT		50
-#define S2W_Y_MAX		1280
-#define S2W_X_MAX		720
 #define S2W_X_NEXT		300
 #define S2W_Y_NEXT		400
 #define S2W_X_LIMIT		150
 #define S2W_Y_LIMIT		100
-#define S2W_X_FINAL		200
-#define S2W_Y_FINAL		400
+#define S2W_AREA_X1		200
+#define S2W_AREA_Y1		300
+#define S2W_AREA_X2		WAKE_X_MAX - S2W_AREA_X1 - 1
+#define S2W_AREA_Y2		WAKE_Y_MAX - S2W_AREA_Y1 - 1
 #define SWEEP_RIGHT		0x01
 #define SWEEP_LEFT		0x02
 #define SWEEP_UP		0x04
@@ -1408,7 +1414,8 @@ static void synaptics_funcarea_down(struct synaptics_clearpad *this,
 				&& time_is_after_jiffies(this->wakeup.firstly_time + DOUBLETAP_TIMEOUT)
 				&&  abs(this->wakeup.last_x - cur->x) < DOUBLETAP_LIMIT
 				&&  abs(this->wakeup.last_y - cur->y) < DOUBLETAP_LIMIT
-				&& (this->wakeup.dt2w_switch == 2 || (cur->x > 240 && cur->x <= 479 && cur->y > 460 && cur->y <= 819))) {
+				&& (this->wakeup.dt2w_switch == 2 || (cur->x > DOUBLETAP_AREA_X1 && cur->x <= DOUBLETAP_AREA_X2
+					&& cur->y > DOUBLETAP_AREA_Y1 && cur->y <= DOUBLETAP_AREA_Y2))) {
 				synaptics_report_gesture(this, 5);
 				this->wakeup.down = 2;
 				this->wakeup.down_time = jiffies;
@@ -1460,19 +1467,19 @@ static void synaptics_funcarea_up(struct synaptics_clearpad *this,
 			int diff_y = abs(cur->y - this->wakeup.last_y);
 			if (diff_y < S2W_Y_LIMIT && diff_x > S2W_X_NEXT)
 			{
-				if ((this->wakeup.s2w_switch & SWEEP_RIGHT) && this->wakeup.last_x <  S2W_X_FINAL && cur->x > S2W_X_MAX - S2W_X_FINAL)
+				if ((this->wakeup.s2w_switch & SWEEP_RIGHT) && this->wakeup.last_x <  S2W_AREA_X1 && cur->x > S2W_AREA_X2)
 				{
 					synaptics_report_gesture(this, 1);
-				} else if ((this->wakeup.s2w_switch & SWEEP_LEFT) && this->wakeup.last_x >  S2W_X_MAX - S2W_X_FINAL &&  cur->x <  S2W_X_FINAL)
+				} else if ((this->wakeup.s2w_switch & SWEEP_LEFT) && this->wakeup.last_x > S2W_AREA_X2 &&  cur->x < S2W_AREA_X1)
 				{
 					synaptics_report_gesture(this, 2);
 				} 
 			} else if (diff_x < S2W_X_LIMIT && diff_y > S2W_Y_NEXT)
 			{
-				if ((this->wakeup.s2w_switch & SWEEP_UP) && this->wakeup.last_y >  S2W_X_MAX - S2W_Y_FINAL &&  cur->y <  S2W_Y_FINAL)
+				if ((this->wakeup.s2w_switch & SWEEP_UP) && this->wakeup.last_y > S2W_AREA_Y2 &&  cur->y <  S2W_AREA_Y1)
 				{
 					synaptics_report_gesture(this, 3);
-				}else if ((this->wakeup.s2w_switch & SWEEP_DOWN) && this->wakeup.last_y <  S2W_Y_FINAL && cur->y > S2W_Y_MAX - S2W_Y_FINAL)
+				}else if ((this->wakeup.s2w_switch & SWEEP_DOWN) && this->wakeup.last_y <  S2W_AREA_Y1 && cur->y > S2W_AREA_Y2)
 				{
 					synaptics_report_gesture(this, 4);
 				}
@@ -2349,7 +2356,7 @@ static int synaptics_clearpad_pm_suspend(struct device *dev)
 	UNLOCK(this);
 
 #ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
-	if (!(this->wakeup.s2w_switch || this->wakeup.dt2w_switch || this->wakeup.gestures_switch))
+	if (!(this->wakeup.s2w_switch || this->wakeup.dt2w_switch))
 		rc = synaptics_clearpad_set_power(this);
 #else
 	rc = synaptics_clearpad_set_power(this);
@@ -2383,7 +2390,7 @@ static int synaptics_clearpad_suspend(struct device *dev)
 	struct synaptics_clearpad *this = dev_get_drvdata(dev);
 	int rc = 0;
 
-	if ((this->wakeup.s2w_switch || this->wakeup.dt2w_switch || this->wakeup.gestures_switch)) {
+	if (this->wakeup.s2w_switch || this->wakeup.dt2w_switch) {
 		disable_irq(this->pdata->irq);
 		if (device_may_wakeup(dev))
 			enable_irq_wake(this->pdata->irq);
@@ -2397,7 +2404,7 @@ static int synaptics_clearpad_resume(struct device *dev)
 	struct synaptics_clearpad *this = dev_get_drvdata(dev);
 	int rc = 0;
 
-	if ((this->wakeup.s2w_switch || this->wakeup.dt2w_switch || this->wakeup.gestures_switch)) {
+	if (this->wakeup.s2w_switch || this->wakeup.dt2w_switch) {
 		if (device_may_wakeup(dev))
 			disable_irq_wake(this->pdata->irq);
 		enable_irq(this->pdata->irq);
