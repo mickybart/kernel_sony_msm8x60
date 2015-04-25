@@ -40,6 +40,9 @@
 #ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
 #include <linux/mfd/pm8xxx/vibrator.h>
 #endif
+#if defined(CONFIG_TOUCHSCREEN_PROXIMITY_INTERACTION) && defined(CONFIG_INPUT_APDS9702)
+#include <linux/apds9702.h>
+#endif
 
 #define SYNAPTICS_CLEARPAD_VENDOR		0x1
 #define SYNAPTICS_MAX_N_FINGERS			10
@@ -358,9 +361,13 @@ struct synaptics_wakeup {
 	int last_x;
 	int last_y;
 	int down;
-	unsigned long down_time;
 	unsigned long firstly_time;
 	unsigned long pwrtrigger_time[2];
+#ifdef CONFIG_TOUCHSCREEN_PROXIMITY_INTERACTION
+	bool proximity;
+	bool proximity_state;
+	bool proximity_consume;
+#endif
 };
 #endif
 
@@ -405,6 +412,10 @@ struct synaptics_clearpad {
 	struct synaptics_wakeup wakeup;
 #endif
 };
+
+#ifdef CONFIG_TOUCHSCREEN_PROXIMITY_INTERACTION
+static struct synaptics_clearpad *synaptics_clearpad_inst = NULL;
+#endif
 
 #ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
 static void synaptics_report_gesture(struct synaptics_clearpad *this, int gest)
@@ -1155,7 +1166,18 @@ static int synaptics_clearpad_set_power(struct synaptics_clearpad *this)
 		rc = -ENODEV;
 		goto err_unlock;
 	}
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
+	should_wake = !(active & SYN_STANDBY) || this->wakeup.dt2w_switch || this->wakeup.s2w_switch;
+#ifdef CONFIG_TOUCHSCREEN_PROXIMITY_INTERACTION
+	if (this->wakeup.proximity && !!(active & SYN_STANDBY)) {
+		should_wake = !this->wakeup.proximity_state && (this->wakeup.s2w_switch || this->wakeup.dt2w_switch);
+		//we have take care at least one time of the last proximity_state
+		this->wakeup.proximity_consume = true;
+	}
+#endif
+#else
 	should_wake = !(active & SYN_STANDBY);
+#endif
 
 	if (should_wake && !(active & SYN_ACTIVE_POWER)) {
 
@@ -1168,7 +1190,7 @@ static int synaptics_clearpad_set_power(struct synaptics_clearpad *this)
 		}
 
 		synaptics_clearpad_set_irq(this,
-				this->pdt[SYN_F01_RMI].irq_mask, true);
+			this->pdt[SYN_F01_RMI].irq_mask, true);
 		synaptics_read(this, SYNF(F01_RMI, DATA, 0x01), &irq, 1);
 
 		rc = synaptics_put_bit(this, SYNF(F01_RMI, CTRL, 0x00),
@@ -1197,6 +1219,7 @@ static int synaptics_clearpad_set_power(struct synaptics_clearpad *this)
 		}
 		usleep(10000); /* wait for last irq */
 		LOG_CHECK(this, "enter sleep mode\n");
+		
 		synaptics_clearpad_set_irq(this,
 				this->pdt[SYN_F01_RMI].irq_mask, false);
 
@@ -1418,7 +1441,6 @@ static void synaptics_funcarea_down(struct synaptics_clearpad *this,
 					&& cur->y > DOUBLETAP_AREA_Y1 && cur->y <= DOUBLETAP_AREA_Y2))) {
 				synaptics_report_gesture(this, 5);
 				this->wakeup.down = 2;
-				this->wakeup.down_time = jiffies;
 			} else {
 				this->wakeup.down = 1;
 				this->wakeup.firstly_time = jiffies;
@@ -2244,6 +2266,33 @@ static ssize_t synaptics_vib_strength_show(struct device *dev,
 	count += sprintf(buf, "%d\n", this->wakeup.vib_strength);
 	return count;
 }
+
+#ifdef CONFIG_TOUCHSCREEN_PROXIMITY_INTERACTION
+static ssize_t synaptics_proximity_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t size)
+{
+	struct synaptics_clearpad *this = dev_get_drvdata(dev);
+	
+	if (sysfs_streq(buf, "0")) {
+		this->wakeup.proximity = false;
+	} else {
+		this->wakeup.proximity = true;
+	}
+
+	return size;
+}
+
+static ssize_t synaptics_proximity_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct synaptics_clearpad *this = dev_get_drvdata(dev);
+	
+	size_t count = 0;
+	count += sprintf(buf, "%d\n", this->wakeup.proximity);
+	return count;
+}
+#endif
 #endif
 
 static DEVICE_ATTR(fwinfo, 0600, synaptics_clearpad_state_show, 0);
@@ -2260,6 +2309,9 @@ static DEVICE_ATTR(wake_gestures, 0644, synaptics_wake_gestures_show, synaptics_
 static DEVICE_ATTR(doubletap2wake, 0644, synaptics_doubletap2wake_show, synaptics_doubletap2wake_store); 
 static DEVICE_ATTR(sweep2wake, 0644, synaptics_sweep2wake_show, synaptics_sweep2wake_store); 
 static DEVICE_ATTR(vib_strength, 0644, synaptics_vib_strength_show, synaptics_vib_strength_store); 
+#ifdef CONFIG_TOUCHSCREEN_PROXIMITY_INTERACTION
+static DEVICE_ATTR(proximity, 0644, synaptics_proximity_show, synaptics_proximity_store);
+#endif
 #endif
 
 static struct attribute *synaptics_clearpad_attributes[] = {
@@ -2277,6 +2329,9 @@ static struct attribute *synaptics_clearpad_attributes[] = {
 	&dev_attr_doubletap2wake.attr,
 	&dev_attr_sweep2wake.attr,
 	&dev_attr_vib_strength.attr,
+#ifdef CONFIG_TOUCHSCREEN_PROXIMITY_INTERACTION
+	&dev_attr_proximity.attr,
+#endif
 #endif
 	NULL
 };
@@ -2354,13 +2409,14 @@ static int synaptics_clearpad_pm_suspend(struct device *dev)
 	LOG_STAT(this, "active: %x (task: %s)\n",
 		 this->active, task_name[this->task]);
 	UNLOCK(this);
-
-#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
-	if (!(this->wakeup.s2w_switch || this->wakeup.dt2w_switch))
-		rc = synaptics_clearpad_set_power(this);
-#else
-	rc = synaptics_clearpad_set_power(this);
+	
+#if defined(CONFIG_TOUCHSCREEN_PROXIMITY_INTERACTION) && defined(CONFIG_INPUT_APDS9702) && defined(CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP)
+	if (this->wakeup.proximity && (this->wakeup.s2w_switch || this->wakeup.dt2w_switch))
+		this->wakeup.proximity_state = false;
+		apds9702_touchscreen_device_open();
 #endif
+
+	rc = synaptics_clearpad_set_power(this);
 	
 	return rc;
 }
@@ -2370,7 +2426,7 @@ static int synaptics_clearpad_pm_resume(struct device *dev)
 	struct synaptics_clearpad *this = dev_get_drvdata(dev);
 	int rc = 0;
 	bool go_resume;
-
+	
 	LOCK(this);
 	go_resume = !!(this->active & (SYN_STANDBY | SYN_STANDBY_AFTER_TASK));
 	if (go_resume)
@@ -2379,6 +2435,11 @@ static int synaptics_clearpad_pm_resume(struct device *dev)
 	LOG_STAT(this, "active: %x (task: %s)\n",
 		 this->active, task_name[this->task]);
 	UNLOCK(this);
+	
+#if defined(CONFIG_TOUCHSCREEN_PROXIMITY_INTERACTION) && defined(CONFIG_INPUT_APDS9702) && defined(CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP)
+	apds9702_touchscreen_device_close();
+	this->wakeup.proximity_state = false;
+#endif
 
 	rc = synaptics_clearpad_set_power(this);
 	return rc;
@@ -2410,8 +2471,40 @@ static int synaptics_clearpad_resume(struct device *dev)
 		enable_irq(this->pdata->irq);
 	}
 
+#if defined(CONFIG_TOUCHSCREEN_PROXIMITY_INTERACTION) && defined(CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP)
+	if (this->wakeup.proximity && !this->wakeup.proximity_consume)
+		synaptics_clearpad_set_power(this);
+#endif
+
 	return rc;
 }
+#endif
+
+#ifdef CONFIG_TOUCHSCREEN_PROXIMITY_INTERACTION
+void synaptics_clearpad_proximity_notify(bool proximity_state) {
+	struct synaptics_clearpad *this = synaptics_clearpad_inst;
+	
+	if (this == NULL || !this->wakeup.proximity)
+		return;
+	
+	LOCK(this);
+	this->wakeup.proximity_state = proximity_state;
+	this->wakeup.proximity_consume = false;
+	UNLOCK(this);
+	
+	dev_info(&this->pdev->dev, "notify (%d) disable_depth (%d)\n", proximity_state, this->pdev->dev.power.disable_depth);
+
+	if (this->pdev->dev.power.disable_depth == 1)
+		synaptics_clearpad_set_power(this);
+}
+EXPORT_SYMBOL(synaptics_clearpad_proximity_notify);
+
+bool synaptics_clearpad_proximity_power() {
+       struct synaptics_clearpad *this = synaptics_clearpad_inst;
+       
+       return (this != NULL && this->wakeup.proximity && (this->wakeup.s2w_switch || this->wakeup.dt2w_switch));
+}
+EXPORT_SYMBOL(synaptics_clearpad_proximity_enabled)
 #endif
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
@@ -2422,9 +2515,6 @@ static void synaptics_clearpad_early_suspend(struct early_suspend *handler)
 
 	dev_info(&this->pdev->dev, "early suspend\n");
 	synaptics_clearpad_pm_suspend(&this->pdev->dev);
-#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
-	this->wakeup.down_time = jiffies;
-#endif
 }
 
 static void synaptics_clearpad_late_resume(struct early_suspend *handler)
@@ -2909,6 +2999,10 @@ static int __devinit clearpad_probe(struct platform_device *pdev)
 	this->wakeup.vib_strength = VIB_STRENGTH;
 	
 	device_init_wakeup(&this->pdev->dev, true);
+	
+#ifdef CONFIG_TOUCHSCREEN_PROXIMITY_INTERACTION
+	synaptics_clearpad_inst = this;
+#endif
 #endif
 
 	return 0;
@@ -2967,6 +3061,10 @@ static int __devexit clearpad_remove(struct platform_device *pdev)
 	sysfs_remove_link(NULL, ANDROID_TOUCH);
 #endif
 
+#ifdef CONFIG_TOUCHSCREEN_PROXIMITY_INTERACTION
+	synaptics_clearpad_inst = NULL;
+#endif
+	
 	dev_set_drvdata(&pdev->dev, NULL);
 	kfree(this);
 

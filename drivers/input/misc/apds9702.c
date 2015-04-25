@@ -27,6 +27,9 @@
 #include <linux/input.h>
 #include <linux/delay.h>
 #include <linux/module.h>
+#if defined(CONFIG_TOUCHSCREEN_PROXIMITY_INTERACTION) && defined(CONFIG_TOUCHSCREEN_CLEARPAD)
+#include <linux/clearpad.h>
+#endif
 
 #define APDS9702_VENDOR      0x0001
 
@@ -57,7 +60,16 @@ struct apds9702data {
 	u16 ctl_reg;
 	unsigned int active:1;
 	struct apds9702_platform_data *pdata;
+#ifdef CONFIG_TOUCHSCREEN_PROXIMITY_INTERACTION
+	int open_count;
+	bool touchscreen_notify;
+	struct mutex touchscreen_lock;
+#endif
 };
+
+#ifdef CONFIG_TOUCHSCREEN_PROXIMITY_INTERACTION
+static struct apds9702data *apds9702_data_inst = NULL;
+#endif
 
 static int apds9702_write_byte(struct i2c_client *i2c_client, u8 reg, u8 val)
 {
@@ -116,9 +128,27 @@ static irqreturn_t apds9702_work(int irq, void *handle)
 	if (data->active) {
 		int d = gpio_get_value(pdata->gpio_dout);
 		dev_dbg(&data->client->dev, "%s: gpio = %d\n", __func__, d);
+#ifdef CONFIG_TOUCHSCREEN_PROXIMITY_INTERACTION
+		mutex_lock(&data->touchscreen_lock);
+		
+		if (data->touchscreen_notify) {
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD
+			synaptics_clearpad_proximity_notify(d == DOUT_VALUE_IF_DETECTED);
+#endif
+		}
+		
+		if (data->open_count > 1 || !data->touchscreen_notify) {
+			input_report_abs(data->input_dev, ABS_DISTANCE,
+				 d == DOUT_VALUE_IF_DETECTED ? 0 : 255);
+			input_sync(data->input_dev);
+		}
+		
+		mutex_unlock(&data->touchscreen_lock);
+#else
 		input_report_abs(data->input_dev, ABS_DISTANCE,
 				 d == DOUT_VALUE_IF_DETECTED ? 0 : 255);
 		input_sync(data->input_dev);
+#endif
 	}
 	mutex_unlock(&data->lock);
 	return IRQ_HANDLED;
@@ -301,7 +331,12 @@ static int apds9702_suspend(struct device *dev)
 {
 	struct apds9702data *data = dev_get_drvdata(dev);
 
+#if defined(CONFIG_TOUCHSCREEN_PROXIMITY_INTERACTION) && defined(CONFIG_TOUCHSCREEN_CLEARPAD)
+	if (!synaptics_clearpad_proximity_power())
+		data->pdata->power_mode(0);
+#else
 	data->pdata->power_mode(0);
+#endif
 
 	return 0;
 }
@@ -323,8 +358,19 @@ static int apds9702_device_open(struct input_dev *dev)
 {
 	struct apds9702data *data = input_get_drvdata(dev);
 	int rc;
+	
+	dev_info(&data->client->dev, "open\n");
+	
 	mutex_lock(&data->lock);
+#ifdef CONFIG_TOUCHSCREEN_PROXIMITY_INTERACTION
+	data->open_count++;
+	if (data->open_count == 1)
+		rc = apds9702_do_sensing(data, 1);
+	else
+		rc = 0;
+#else
 	rc = apds9702_do_sensing(data, 1);
+#endif
 	mutex_unlock(&data->lock);
 	if (rc)
 		dev_err(&data->client->dev, "%s. Failed to activate device,"
@@ -336,13 +382,69 @@ static void apds9702_device_close(struct input_dev *dev)
 {
 	struct apds9702data *data = input_get_drvdata(dev);
 	int rc;
+	
+	dev_info(&data->client->dev, "close\n");
+	
 	mutex_lock(&data->lock);
+#ifdef CONFIG_TOUCHSCREEN_PROXIMITY_INTERACTION
+	data->open_count--;
+	if (!data->open_count)
+		rc = apds9702_do_sensing(data, 0);
+	else
+		rc = 0;
+#else
 	rc = apds9702_do_sensing(data, 0);
+#endif
 	mutex_unlock(&data->lock);
 	if (rc)
 		dev_err(&data->client->dev, "%s. Failed to deactivate device,"
 			" err = %d\n",	__func__, rc);
 }
+
+#ifdef CONFIG_TOUCHSCREEN_PROXIMITY_INTERACTION
+int apds9702_touchscreen_device_open() {
+	struct apds9702data *data = apds9702_data_inst;
+	int rc;
+	
+	if (data == NULL)
+		return -1;
+	
+	dev_info(&data->client->dev, "touchscreen open\n");
+	
+	mutex_lock(&data->touchscreen_lock);
+	
+	if (!data->touchscreen_notify) {
+		data->touchscreen_notify = true;
+		rc = apds9702_device_open(data->input_dev);
+	} else {
+		rc = 0;
+	}
+	
+	mutex_unlock(&data->touchscreen_lock);
+	
+	return rc;
+}
+EXPORT_SYMBOL(apds9702_touchscreen_device_open);
+
+void apds9702_touchscreen_device_close() {
+	struct apds9702data *data = apds9702_data_inst;
+	
+	if (data == NULL)
+		return;
+	
+	dev_info(&data->client->dev, "touchscreen close\n");
+	
+	mutex_lock(&data->touchscreen_lock);
+	
+	if (data->touchscreen_notify) {
+		data->touchscreen_notify = false;
+		apds9702_device_close(data->input_dev);
+	}
+	
+	mutex_unlock(&data->touchscreen_lock);
+}
+EXPORT_SYMBOL(apds9702_touchscreen_device_close);
+#endif
 
 static int apds9702_probe(struct i2c_client *client,
 			 const struct i2c_device_id *id)
@@ -444,6 +546,10 @@ static int apds9702_probe(struct i2c_client *client,
 		goto err_request_wake_irq;
 	}
 
+#ifdef CONFIG_TOUCHSCREEN_PROXIMITY_INTERACTION
+	mutex_init(&data->touchscreen_lock);
+	apds9702_data_inst = data;
+#endif
 
 	printk(KERN_INFO "%s: device create ok. I2C address = %x\n", __func__,
 			client->addr);
@@ -480,6 +586,11 @@ static int apds9702_remove(struct i2c_client *client)
 	pdata->hw_config(0);
 	pdata->gpio_setup(0);
 	pdata->power_mode(0);
+	
+#ifdef CONFIG_TOUCHSCREEN_PROXIMITY_INTERACTION
+	apds9702_data_inst = NULL;
+#endif
+	
 	kfree(data);
 	i2c_set_clientdata(client, NULL);
 	return 0;

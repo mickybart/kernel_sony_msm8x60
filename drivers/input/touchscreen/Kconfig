@@ -1005,5 +1005,13 @@ config TOUCHSCREEN_CLEARPAD_RMI_DEV
         help
           Say Y here to enable Synaptics ClearPad RMI dev.
 
+config TOUCHSCREEN_PROXIMITY_INTERACTION
+	tristate "Touchscreen Proximity Interaction"
+	default n
+	help
+	  Say Y here to permit the touchscreen to control his power based
+	  on the proximity sensor state. The touchscreen will provide a way
+	  to the proximity sensor to decide itself to powered off or not
+	  during pm suspend operation.
 endif
 
