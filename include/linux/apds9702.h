@@ -30,4 +30,9 @@ struct apds9702_platform_data {
 	int (*gpio_setup)(int request);
 	void (*power_mode)(int enable);
 };
+
+#ifdef CONFIG_TOUCHSCREEN_PROXIMITY_INTERACTION
+extern int apds9702_touchscreen_device_open(void);
+extern void apds9702_touchscreen_device_close(void);
+#endif
 #endif
