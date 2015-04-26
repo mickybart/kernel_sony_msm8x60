@@ -420,6 +420,7 @@ static void synaptics_report_gesture(struct synaptics_clearpad *this, int gest)
 	{
 		input_report_key(this->input, KEY_POWER, 1);
 		input_report_key(this->input, KEY_POWER, 0);
+		set_vibrate(this->wakeup.vib_strength);
 		return;
 	}
 	this->wakeup.pwrtrigger_time[1] = this->wakeup.pwrtrigger_time[0];
