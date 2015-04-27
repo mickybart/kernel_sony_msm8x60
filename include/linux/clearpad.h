@@ -81,4 +81,9 @@ struct clearpad_data {
 	struct clearpad_platform_data *pdata;
 	struct clearpad_bus_data *bdata;
 };
+
+#ifdef CONFIG_TOUCHSCREEN_PROXIMITY_INTERACTION
+extern void synaptics_clearpad_proximity_notify(bool proximity_state);
+extern bool synaptics_clearpad_proximity_power(void);
+#endif
 #endif
