@@ -329,22 +329,18 @@ static const u8 f54_commands[] = {
 #define WAKE_GESTURE		0x0b
 #define WAKE_Y_MAX		1280
 #define WAKE_X_MAX		720
-#define SWEEP_TIMEOUT		30
-#define DOUBLETAP_TIMEOUT	HZ / 5
+#define SWEEP_TIMEOUT		HZ / 3
+#define DOUBLETAP_TIMEOUT	HZ / 4
 #define DOUBLETAP_LIMIT		100
 #define DOUBLETAP_AREA_X1	240
 #define DOUBLETAP_AREA_Y1	460
 #define DOUBLETAP_AREA_X2	WAKE_X_MAX - DOUBLETAP_AREA_X1 - 1
 #define DOUBLETAP_AREA_Y2	WAKE_Y_MAX - DOUBLETAP_AREA_Y1 - 1
 #define TRIGGER_TIMEOUT		50
-#define S2W_X_NEXT		300
-#define S2W_Y_NEXT		400
-#define S2W_X_LIMIT		150
-#define S2W_Y_LIMIT		100
-#define S2W_AREA_X1		200
-#define S2W_AREA_Y1		300
-#define S2W_AREA_X2		WAKE_X_MAX - S2W_AREA_X1 - 1
-#define S2W_AREA_Y2		WAKE_Y_MAX - S2W_AREA_Y1 - 1
+#define S2W_X_NEXT		240
+#define S2W_Y_NEXT		426
+#define S2W_X_LIMIT		200
+#define S2W_Y_LIMIT		256
 #define SWEEP_RIGHT		0x01
 #define SWEEP_LEFT		0x02
 #define SWEEP_UP		0x04
@@ -1490,19 +1486,19 @@ static void synaptics_funcarea_up(struct synaptics_clearpad *this,
 			int diff_y = abs(cur->y - this->wakeup.last_y);
 			if (diff_y < S2W_Y_LIMIT && diff_x > S2W_X_NEXT)
 			{
-				if ((this->wakeup.s2w_switch & SWEEP_RIGHT) && this->wakeup.last_x <  S2W_AREA_X1 && cur->x > S2W_AREA_X2)
+				if ((this->wakeup.s2w_switch & SWEEP_RIGHT) && this->wakeup.last_x < cur->x)
 				{
 					synaptics_report_gesture(this, 1);
-				} else if ((this->wakeup.s2w_switch & SWEEP_LEFT) && this->wakeup.last_x > S2W_AREA_X2 &&  cur->x < S2W_AREA_X1)
+				} else if ((this->wakeup.s2w_switch & SWEEP_LEFT) && this->wakeup.last_x > cur->x)
 				{
 					synaptics_report_gesture(this, 2);
 				} 
 			} else if (diff_x < S2W_X_LIMIT && diff_y > S2W_Y_NEXT)
 			{
-				if ((this->wakeup.s2w_switch & SWEEP_UP) && this->wakeup.last_y > S2W_AREA_Y2 &&  cur->y <  S2W_AREA_Y1)
+				if ((this->wakeup.s2w_switch & SWEEP_UP) && this->wakeup.last_y > cur->y)
 				{
 					synaptics_report_gesture(this, 3);
-				}else if ((this->wakeup.s2w_switch & SWEEP_DOWN) && this->wakeup.last_y <  S2W_AREA_Y1 && cur->y > S2W_AREA_Y2)
+				}else if ((this->wakeup.s2w_switch & SWEEP_DOWN) && this->wakeup.last_y < cur->y)
 				{
 					synaptics_report_gesture(this, 4);
 				}
