@@ -469,4 +469,3 @@ config TIGHT_PGDAT_BALANCE
 	bool "Increase balance condition"
 	default n
 	depends on ZSWAP
->>>>>>> ca5d477... nicki: backport zswap, frontswap, vnswap from Linux 3.11
