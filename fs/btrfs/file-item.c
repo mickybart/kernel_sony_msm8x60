@@ -29,7 +29,7 @@
 				   sizeof(struct btrfs_item) * 2) / \
 				  size) - 1))
 
-#define MAX_CSUM_ITEMS(r, size) (min(__MAX_CSUM_ITEMS(r, size), PAGE_CACHE_SIZE))
+#define MAX_CSUM_ITEMS(r, size) (min(((ulong)(__MAX_CSUM_ITEMS(r, size))), PAGE_CACHE_SIZE))
 
 #define MAX_ORDERED_SUM_BYTES(r) ((PAGE_SIZE - \
 				   sizeof(struct btrfs_ordered_sum)) / \
