@@ -210,6 +210,8 @@ static int bma250_motion_power_down(struct driver_data *dd,	int	motion)
 	struct bma250_platform_data	*pdata = dd->ic_dev->dev.platform_data;
 	int	power;
 
+	mutex_lock(&bma250_power_lock);
+
 	power =	dd->power &	~(1	<< motion);
 
 	if (!power)	{
@@ -228,6 +230,8 @@ static int bma250_motion_power_down(struct driver_data *dd,	int	motion)
 
 	dd->power =	power;
 
+	mutex_unlock(&bma250_power_lock);
+
 	return 0;
 }
 
@@ -235,6 +239,8 @@ static int bma250_motion_power_up(struct driver_data *dd, int motion)
 {
 	struct bma250_platform_data	*pdata = dd->ic_dev->dev.platform_data;
 	int	rc = 0,	power;
+
+	mutex_lock(&bma250_power_lock);
 
 	power =	dd->power |	(1 << motion);
 
@@ -311,12 +317,15 @@ static int bma250_motion_power_up(struct driver_data *dd, int motion)
 	}
 
 	dd->power =	power;
+	mutex_unlock(&bma250_power_lock);
 	return rc;
 
 power_up_error:
 	bma250_hw_shutdown(dd);
 hw_setup_error:
 	printk(KERN_ERR	"%s: Force power down.\n", __func__);
+	mutex_unlock(&bma250_power_lock);
+
 	return rc;
 }
 
