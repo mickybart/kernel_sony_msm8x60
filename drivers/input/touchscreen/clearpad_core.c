@@ -31,6 +31,8 @@
 #include <linux/sched.h>
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
+#else
+#include <linux/fb.h>
 #endif
 #ifdef CONFIG_ARM
 #include <asm/mach-types.h>
@@ -341,6 +343,8 @@ struct synaptics_clearpad {
 	int irq_mask;
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	struct early_suspend early_suspend;
+#else
+	struct notifier_block notifier;
 #endif
 	char fwname[SYNAPTICS_STRING_LENGTH + 1];
 	char result_info[SYNAPTICS_STRING_LENGTH + 1];
@@ -2231,6 +2235,28 @@ static void synaptics_clearpad_late_resume(struct early_suspend *handler)
 	dev_info(&this->pdev->dev, "late resume\n");
 	synaptics_clearpad_pm_resume(&this->pdev->dev);
 }
+#else
+static int synaptics_clearpad_fb_notifier_callback(struct notifier_block *p,
+				unsigned long event, void *data)
+{
+	if (event == FB_EVENT_BLANK) {
+		struct synaptics_clearpad *this =
+		container_of(p, struct synaptics_clearpad, notifier);
+		struct fb_event *fb_event = data;
+		int *blank = fb_event->data;
+
+		if (*blank) {
+			dev_info(&this->pdev->dev, "fb blank\n");
+			synaptics_clearpad_pm_suspend(&this->pdev->dev);
+			this->wakeup_down_time = jiffies;
+		} else {
+			dev_info(&this->pdev->dev, "fb unblank\n");
+			synaptics_clearpad_pm_resume(&this->pdev->dev);
+		}
+	}
+
+	return 0;
+}
 #endif
 #ifdef CONFIG_DEBUG_FS
 static void synaptics_clearpad_analog_test(struct synaptics_clearpad *this,
@@ -2637,6 +2663,11 @@ static int __devinit clearpad_probe(struct platform_device *pdev)
 	this->early_suspend.suspend = synaptics_clearpad_early_suspend;
 	this->early_suspend.resume = synaptics_clearpad_late_resume;
 	register_early_suspend(&this->early_suspend);
+#else
+	this->notifier.notifier_call = synaptics_clearpad_fb_notifier_callback;
+	rc = fb_register_client(&this->notifier);
+	if (rc)
+		dev_err(&this->pdev->dev, "unable to register fb notifier\n");
 #endif
 
 	/* sysfs */
