@@ -569,6 +569,8 @@ static int bma250_power_down(struct driver_data *dd)
 	char                bypass = 0;
 	struct bma250_platform_data *pdata = dd->ic_dev->dev.platform_data;
 
+	cancel_delayed_work_sync(&dd->work_data);
+
 	mutex_lock(&bma250_power_lock);
 
 	if (slave_hw) {
@@ -579,14 +581,12 @@ static int bma250_power_down(struct driver_data *dd)
 				rc = bma250_ic_write(dd->ic_dev,
 					BMA250_MODE_CTRL_REG,
 					BMA250_MODE_SUSPEND);
-				cancel_delayed_work(&dd->work_data);
 				bma250_hw_shutdown(dd);
 			}
 		}
 	} else {
 		rc = bma250_ic_write(dd->ic_dev, BMA250_MODE_CTRL_REG,
 				BMA250_MODE_SUSPEND);
-		cancel_delayed_work(&dd->work_data);
 		bma250_hw_shutdown(dd);
 	}
 	dd->power = false;
