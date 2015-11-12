@@ -2185,10 +2185,6 @@ static int synaptics_clearpad_suspend(struct device *dev)
 	struct synaptics_clearpad *this = dev_get_drvdata(dev);
 	int rc = 0;
 
-#ifndef CONFIG_HAS_EARLYSUSPEND
-	rc = synaptics_clearpad_pm_suspend(&this->pdev->dev);
-#endif
-
 	if (this->wakeup) {
 		disable_irq(this->pdata->irq);
 		if (device_may_wakeup(dev))
@@ -2208,10 +2204,6 @@ static int synaptics_clearpad_resume(struct device *dev)
 			disable_irq_wake(this->pdata->irq);
 		enable_irq(this->pdata->irq);
 	}
-
-#ifndef CONFIG_HAS_EARLYSUSPEND
-	rc = synaptics_clearpad_pm_resume(&this->pdev->dev);
-#endif
 
 	return rc;
 }
