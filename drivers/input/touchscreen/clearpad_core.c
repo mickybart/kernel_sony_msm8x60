@@ -2535,7 +2535,6 @@ static int synaptics_clearpad_fb_notifier_callback(struct notifier_block *p,
 		if (*blank) {
 			dev_info(&this->pdev->dev, "fb blank\n");
 			synaptics_clearpad_pm_suspend(&this->pdev->dev);
-			this->wakeup_down_time = jiffies;
 		} else {
 			dev_info(&this->pdev->dev, "fb unblank\n");
 			synaptics_clearpad_pm_resume(&this->pdev->dev);
