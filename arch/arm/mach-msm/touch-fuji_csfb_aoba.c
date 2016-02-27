@@ -50,6 +50,12 @@ struct synaptics_funcarea clearpad_funcarea_array[] = {
 		{ 560, 1320, 719, 1336 }, { 540, 1300, 719, 1336 },
 		SYN_FUNCAREA_BUTTON, &synaptics_search_key
 	},
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_WAKEUP
+	{
+		{ 0, 0, 719, 1279 }, { 0, 0, 719, 1279 },
+		SYN_FUNCAREA_WAKEUP, NULL
+	},
+#endif
 	{ .func = SYN_FUNCAREA_END }
 };
 
