@@ -399,7 +399,7 @@ power_key:
 		break;
 	case BMA250_EVENT_ABS:
 		input_abs_set_val(dd->ip_dev, ABS_MISC,	0);
-		input_report_abs(dd->ip_dev, ABS_MISC, 1);
+		input_report_abs(dd->ip_dev, ABS_MISC, motion);
 		input_sync(dd->ip_dev);
 		break;
 	}
