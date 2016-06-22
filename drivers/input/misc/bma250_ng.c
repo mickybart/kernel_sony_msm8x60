@@ -4,6 +4,7 @@
  *
  * Copyright (C) 2010 Sony Ericsson Mobile Communications AB.
  * Copyright (C) 2012 Sony Mobile Communications AB.
+ * Copyright (C) 2016 nAOSP ROM
  *
  * Author: Marcus Bauer <marcus.bauer@sonymobile.com>
  *         Tadashi Kubo <tadashi.kubo@sonymobile.com>
@@ -98,10 +99,6 @@
 #include <linux/module.h>
 #include <linux/reboot.h>
 
-#ifdef CONFIG_INPUT_BMA250_MOTION
-#include "bma250_motion.h"
-#endif
-
 #define BMA250_NAME                      "bma250"
 #define BMA250_VENDORID                  0x0001
 
@@ -185,6 +182,110 @@ static uint16_t bma250_mask[] = {
 #define BMA250_READDATA_RETRY  5
 #define BMA250_BYPASS_STABEL   5
 #define BMA250_I2C_WRITE_RETRY 5
+
+#ifdef CONFIG_INPUT_BMA250_MOTION
+
+#define	BMA250_MOTION_NAME			"bma250_motion"
+#define	BMA250_MOTION_VENDORID			0x0001
+
+#define	BMA250_STARTUP_TIME			4
+
+#define	BMA250_TAP_DURATION_DEFAULT		(BMA250_TAP_SHOCK_50MS | BMA250_TAP_QUIET_30MS | BMA250_TAP_DUR_50MS)
+#define	BMA250_TAP_THRESHOLD_DEFAULT		20
+#define	BMA250_SLOPE_DURATION_DEFAULT		1
+#define	BMA250_SLOPE_THRESHOLD_DEFAULT		10
+#define	BMA250_LOW_G_DURATION_DEFAULT		99
+#define	BMA250_LOW_G_THRESHOLD_DEFAULT		112
+#define	BMA250_LOW_G_HYSTERESIS_DEFAULT		0
+#define	BMA250_HIGH_G_DURATION_DEFAULT		0
+#define	BMA250_HIGH_G_THRESHOLD_DEFAULT		50
+#define	BMA250_HIGH_G_HYSTERESIS_DEFAULT	0
+#define	BMA250_FLAT_THETA_DEFAULT		2
+#define	BMA250_FLAT_HOLD_DEFAULT		BMA250_FLAT_HOLD_512MS
+
+enum {
+	BMA250_MOTION_TAP,
+	BMA250_MOTION_SLOPE,
+	BMA250_MOTION_LOW_G,
+	BMA250_MOTION_HIGH_G,
+	BMA250_MOTION_COUNT,
+};
+
+#define	BMA250_MODE_MASK			0x0F
+#define	BMA250_EVENT_MASK			0x30
+#define	BMA250_EVENT_POWER_TOGGLE		0x00
+#define	BMA250_EVENT_POWER_UP			0x10
+#define	BMA250_EVENT_POWER_DOWN			0x20
+#define	BMA250_EVENT_ABS			0x30
+#define	BMA250_FLAT_MASK			0x40
+#define	BMA250_GAP_MASK				0x80
+
+struct gap_work	{
+	struct delayed_work			work;
+	struct driver_data			*dd;
+	int					motion;
+};
+
+struct driver_data_motion {
+	struct input_dev			*ip_dev;
+	struct gap_work				 gap_work[BMA250_MOTION_COUNT];
+	int					 flat_motion;
+	struct mutex				 mutex;
+	int					 suspend;
+	int					 power;
+	unsigned char				 mode[BMA250_MOTION_COUNT];
+	unsigned char                            modeNext[BMA250_MOTION_COUNT];
+	unsigned char				 tap_duration;
+	unsigned char				 tap_threshold;
+	unsigned char				 slope_duration;
+	unsigned char				 slope_threshold;
+	unsigned char				 low_g_duration;
+	unsigned char				 low_g_threshold;
+	unsigned char				 low_g_hysteresis;
+	unsigned char				 high_g_duration;
+	unsigned char				 high_g_threshold;
+	unsigned char				 high_g_hysteresis;
+	unsigned char				 flat_theta;
+	unsigned char				 flat_hold;
+};
+
+struct motion_attr {
+	int	irq_mask;
+	int	mode_count;
+	int	mode_irq_mask[8];
+};
+
+static const struct motion_attr bma250_motion_attr[BMA250_MOTION_COUNT] = {
+	{
+		BMA250_INT_STATUS_S_TAP	| BMA250_INT_STATUS_D_TAP,
+		3,
+		{ 0, BMA250_INT_STATUS_S_TAP, BMA250_INT_STATUS_D_TAP },
+	},
+	{
+		BMA250_INT_SLOPE_MASK,
+		8,
+		{ 0, 1,	2, 3, 4, 5,	6, 7 },
+	},
+	{
+		BMA250_INT_LOW_G <<	8,
+		2,
+		{ 0, BMA250_INT_LOW_G << 8 },
+	},
+	{
+		BMA250_INT_HIGH_G_MASK << 8,
+		8,
+		{ 0, 1 << 8, 2 << 8, 3 << 8, 4 << 8, 5 << 8, 6 << 8, 7 << 8	},
+	},
+};
+
+static irqreturn_t bma250_motion_thread_irq(int	irq, void *dev);
+int bma250_ic_write(struct i2c_client *ic_dev, u8 reg, u8 val);
+int bma250_ic_read(struct i2c_client *ic_dev, u8 reg, u8 *buf, int len);
+static int bma250_power_down(struct driver_data *dd);
+static int bma250_power_up(struct driver_data *dd);
+static int bma250_motion_mode(struct driver_data *dd, int motion, int mode);
+#endif /* CONFIG_INPUT_BMA250_MOTION */
+
 /*
  * Data returned from accelerometer.
  * Temp is in units of 0.5 degrees C
@@ -211,7 +312,7 @@ struct driver_data {
 	struct bma250_platform_data *pdata;
 	bool                         power;
 #ifdef CONFIG_INPUT_BMA250_MOTION
-	void                        *motion_dev;
+	struct driver_data_motion    motion;
 #endif
 };
 
@@ -222,6 +323,259 @@ static struct list_head           dd_list;
 static int slave_hw;
 static int bma250_config(struct driver_data *dd, int bw, int range);
 
+#ifdef CONFIG_INPUT_BMA250_MOTION
+static int bma250_motion_irq(struct driver_data *dd, int clear, int set)
+{
+	int rc;
+	u8 int_enable;
+
+	if ((clear & 0xFF) || (set & 0xFF)) {
+		rc = bma250_ic_read(dd->ic_dev, BMA250_INT_ENABLE1_REG, &int_enable, 1);
+		if (rc)
+			return rc;
+
+		int_enable &= ~(clear & 0xFF);
+		int_enable |= (set & 0xFF);
+
+		rc = bma250_ic_write(dd->ic_dev, BMA250_INT_ENABLE1_REG, int_enable);
+		if (rc)
+			return rc;
+	}
+
+	if (((clear	>> 8) &	0xFF) || ((set >> 8) & 0xFF)) {
+		rc = bma250_ic_read(dd->ic_dev, BMA250_INT_ENABLE2_REG, &int_enable, 1);
+		if (rc)
+			return rc;
+
+		int_enable &= ~((clear >> 8) & 0xFF);
+		int_enable |= ((set >> 8) & 0xFF);
+
+		rc = bma250_ic_write(dd->ic_dev, BMA250_INT_ENABLE2_REG, int_enable);
+		if (rc)
+			return rc;
+	}
+
+	return rc;
+}
+
+static int bma250_motion_irq_enable(struct driver_data *dd, int motion)
+{
+	int mode, clear, set;
+
+	mode = dd->motion.mode[motion];
+	clear = bma250_motion_attr[motion].irq_mask;
+	set = bma250_motion_attr[motion].mode_irq_mask[mode & BMA250_MODE_MASK];
+
+	return bma250_motion_irq(dd, clear, set);
+}
+
+static int bma250_motion_irq_disable(struct driver_data *dd, int motion)
+{
+	int clear;
+
+	clear = bma250_motion_attr[motion].irq_mask;
+
+	return bma250_motion_irq(dd, clear, 0);
+}
+
+static int bma250_motion_power_down(struct driver_data *dd, int motion)
+{
+	int rc = 0;
+
+	dd->motion.power &= ~(1 << motion);
+	if (!dd->motion.power) {
+		bma250_ic_write(dd->ic_dev, BMA250_INT_ENABLE1_REG, 0x00);
+		bma250_ic_write(dd->ic_dev, BMA250_INT_ENABLE2_REG, 0x00);
+	}
+
+	return rc;
+}
+
+static int bma250_motion_power_up(struct driver_data *dd, int motion)
+{
+	int rc = 0;
+
+	rc = bma250_power_up(dd);
+	if (!rc) {
+		dd->motion.power |= (1 << motion);
+	}
+
+	return rc;
+}
+
+static void bma250_motion_suspend(struct driver_data *dd, bool suspend)
+{
+	if (suspend) {
+		dd->motion.suspend = 1;
+	} else {
+		int i;
+		dd->motion.suspend = 0;
+		for (i = 0; i < BMA250_MOTION_COUNT; i++) {
+			/* change the mode if it was requested during a suspend state */
+			if (dd->motion.mode[i] != dd->motion.modeNext[i])
+				bma250_motion_mode(dd, i, dd->motion.modeNext[i]);
+		}
+	}
+}
+
+static int bma250_motion_mode(struct driver_data *dd, int motion, int mode)
+{
+	int rc, clear, set;
+
+	if (motion >= BMA250_MOTION_COUNT)
+		return -EINVAL;
+
+	if ((mode & BMA250_MODE_MASK) >= bma250_motion_attr[motion].mode_count)
+		return -EINVAL;
+
+	dd->motion.modeNext[motion] = mode;
+	if( dd->motion.suspend ) {
+		/* It is not possible to change the mode now. */
+		return 0;
+	}
+
+	clear = bma250_motion_attr[motion].irq_mask;
+	set = bma250_motion_attr[motion].mode_irq_mask[mode	& BMA250_MODE_MASK];
+
+	cancel_delayed_work(&dd->motion.gap_work[motion].work);
+	if ((dd->motion.flat_motion == motion) && dd->motion.power) {
+		rc = bma250_motion_irq(dd, BMA250_INT_FLAT, 0);
+		if (rc)
+			return rc;
+	}
+
+	if (mode & BMA250_FLAT_MASK)
+		dd->motion.flat_motion = motion;
+
+	if ((mode & BMA250_MODE_MASK) &&
+		!(((mode & BMA250_EVENT_MASK) == BMA250_EVENT_POWER_UP)	&& !dd->motion.suspend) &&
+		!(((mode & BMA250_EVENT_MASK) == BMA250_EVENT_POWER_DOWN) && dd->motion.suspend)) {
+		rc = bma250_motion_power_up(dd, motion);
+		if (rc)
+			return rc;
+
+		if (mode & BMA250_FLAT_MASK)
+			rc = bma250_motion_irq(dd, 0, BMA250_INT_FLAT);
+		else
+			rc = bma250_motion_irq(dd, clear, set);
+		if (rc)
+			return rc;
+	} else {
+		rc = bma250_motion_irq(dd, clear, 0);
+		if (rc)
+			return rc;
+
+		rc = bma250_motion_power_down(dd, motion);
+		if (rc)
+			return rc;
+	}
+
+	dd->motion.mode[motion] = mode;
+	return 0;
+}
+
+static void bma250_motion_event(struct driver_data *dd, int motion)
+{
+	switch (dd->motion.mode[motion] & BMA250_EVENT_MASK) {
+	case BMA250_EVENT_POWER_TOGGLE:
+power_key:
+		input_report_key(dd->motion.ip_dev, KEY_POWER, 1);
+		input_sync(dd->motion.ip_dev);
+		input_report_key(dd->motion.ip_dev, KEY_POWER, 0);
+		input_sync(dd->motion.ip_dev);
+		break;
+	case BMA250_EVENT_POWER_UP:
+		if (dd->motion.suspend)
+			goto power_key;
+		break;
+	case BMA250_EVENT_POWER_DOWN:
+		if (!dd->motion.suspend)
+			goto power_key;
+		break;
+	case BMA250_EVENT_ABS:
+		input_abs_set_val(dd->motion.ip_dev, ABS_MISC, 0);
+		input_report_abs(dd->motion.ip_dev, ABS_MISC, motion);
+		input_sync(dd->motion.ip_dev);
+		break;
+	}
+}
+
+static void bma250_motion_trig(struct driver_data *dd, int motion)
+{
+	bma250_motion_irq_disable(dd, motion);
+
+	if (dd->motion.mode[motion] & BMA250_GAP_MASK) {
+		cancel_delayed_work(&dd->motion.gap_work[motion].work);
+		schedule_delayed_work(&dd->motion.gap_work[motion].work, HZ);
+	} else if (!(dd->motion.mode[motion] &	BMA250_FLAT_MASK)) {
+		bma250_motion_irq_enable(dd, motion);
+	}
+
+	bma250_motion_event(dd, motion);
+}
+
+static irqreturn_t bma250_motion_thread_irq(int irq, void *dev)
+{
+	struct driver_data *dd = (struct driver_data *)dev;
+	u8 status, status2;
+
+	mutex_lock(&dd->motion.mutex);
+
+	if (!bma250_ic_read(dd->ic_dev,	BMA250_INT_STATUS_REG, &status, 1)) {
+		if ((status & (BMA250_INT_STATUS_S_TAP | BMA250_INT_STATUS_D_TAP | BMA250_INT_STATUS_SLOPE)) &&
+			!bma250_ic_read(dd->ic_dev, BMA250_TAP_SLOPE_STATUS_REG, &status2, 1)) {
+			if ((status & (BMA250_INT_STATUS_S_TAP | BMA250_INT_STATUS_D_TAP)) &&
+				(status2 & BMA250_TAP_FIRST_Z))	{
+				pr_info(BMA250_MOTION_NAME": tap detected\n");
+				bma250_motion_trig(dd, BMA250_MOTION_TAP);
+			}
+
+			if (status & BMA250_INT_STATUS_SLOPE) {
+				pr_info(BMA250_MOTION_NAME": slope detected\n");
+				bma250_motion_trig(dd, BMA250_MOTION_SLOPE);
+			}
+		}
+
+		if (status & BMA250_INT_STATUS_LOW_G) {
+			pr_info(BMA250_MOTION_NAME": low g detected\n");
+			bma250_motion_trig(dd, BMA250_MOTION_LOW_G);
+		}
+
+		if ((status & (BMA250_INT_STATUS_HIGH_G | BMA250_INT_STATUS_FLAT)) &&
+			!bma250_ic_read(dd->ic_dev, BMA250_ORIENT_STATUS_REG, &status2, 1)) {
+			if (status & BMA250_INT_STATUS_HIGH_G) {
+				pr_info(BMA250_MOTION_NAME": high g	detected\n");
+				bma250_motion_trig(dd, BMA250_MOTION_HIGH_G);
+			}
+
+			if (status & BMA250_INT_STATUS_FLAT) {
+				if (status2 & BMA250_FLAT_STATUS) {
+					pr_info(BMA250_MOTION_NAME": flat detected\n");
+					bma250_motion_irq_enable(dd, dd->motion.flat_motion);
+				} else {
+					bma250_motion_irq_disable(dd, dd->motion.flat_motion);
+				}
+			}
+		}
+	}
+
+	bma250_ic_write(dd->ic_dev, BMA250_INT_CTRL_REG,
+		BMA250_INT_RESET | BMA250_INT_LATCHED);
+
+	mutex_unlock(&dd->motion.mutex);
+
+	return IRQ_HANDLED;
+}
+
+static void bma250_motion_gap_work(struct work_struct *work)
+{
+	struct gap_work	*gap = (struct gap_work	*)work;
+
+	mutex_lock(&gap->dd->motion.mutex);
+	bma250_motion_irq_enable(gap->dd, gap->motion);
+	mutex_unlock(&gap->dd->motion.mutex);
+}
+#endif /* CONFIG_INPUT_BMA250_MOTION */
 
 struct driver_data *bma250_ic_get_data(struct i2c_client *ic_dev)
 {
@@ -358,31 +712,376 @@ static ssize_t bma250_rate_store(struct device *dev,
 	return -EINVAL;
 }
 
+#ifdef CONFIG_INPUT_BMA250_MOTION
+static ssize_t bma250_tap_mode_show(struct device *dev,
+					struct device_attribute	*attr,
+					char *buf)
+{
+	struct driver_data *dd = dev_get_drvdata(dev);
+
+	return snprintf(buf, PAGE_SIZE,	"%d\n",	dd->motion.mode[BMA250_MOTION_TAP]);
+}
+
+static ssize_t bma250_tap_mode_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct driver_data *dd = dev_get_drvdata(dev);
+	int rc;
+	unsigned long mode;
+
+	rc = strict_strtoul(buf, 10, &mode);
+	if (rc)
+		return rc;
+
+	mutex_lock(&dd->motion.mutex);
+	if (dd->motion.mode[BMA250_MOTION_TAP] != mode)
+		rc = bma250_motion_mode(dd, BMA250_MOTION_TAP, (int)mode);
+	mutex_unlock(&dd->motion.mutex);
+
+	return rc ? rc : count;
+}
+
+static ssize_t bma250_tap_param_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct driver_data *dd = dev_get_drvdata(dev);
+
+	return snprintf(buf, PAGE_SIZE, "%d %d %d %d\n",
+		!!(dd->motion.tap_duration & BMA250_TAP_SHOCK_MASK),
+		!!(dd->motion.tap_duration & BMA250_TAP_QUIET_MASK),
+		dd->motion.tap_duration & BMA250_TAP_DUR_MASK,
+		dd->motion.tap_threshold);
+}
+
+static ssize_t bma250_tap_param_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct driver_data *dd = dev_get_drvdata(dev);
+	int rc;
+	unsigned int shock, quiet, dur, thr;
+
+	rc = sscanf(buf, "%10u %10u %10u %10u",
+			&shock, &quiet, &dur, &thr);
+	if ((rc != 4) ||
+		(dur & ~BMA250_TAP_DUR_MASK) ||
+		(thr & ~BMA250_TAP_THR_MASK))
+		return -EINVAL;
+
+	mutex_lock(&dd->motion.mutex);
+
+	dd->motion.tap_duration = dur |
+		(quiet ? BMA250_TAP_QUIET_20MS : BMA250_TAP_QUIET_30MS) |
+		(shock ? BMA250_TAP_SHOCK_75MS : BMA250_TAP_SHOCK_50MS);
+	dd->motion.tap_threshold = thr;
+
+	if (dd->power) {
+		rc = bma250_ic_write(dd->ic_dev, BMA250_TAP_DUR_REG, dd->motion.tap_duration);
+		if (!rc)
+			rc = bma250_ic_write(dd->ic_dev, BMA250_TAP_THR_REG, dd->motion.tap_threshold);
+	} else {
+		rc = 0;
+	}
+	mutex_unlock(&dd->motion.mutex);
+
+	return rc ? rc : count;
+}
+
+static ssize_t bma250_slope_mode_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct driver_data *dd = dev_get_drvdata(dev);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", dd->motion.mode[BMA250_MOTION_SLOPE]);
+}
+
+static ssize_t bma250_slope_mode_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct driver_data *dd = dev_get_drvdata(dev);
+	int rc;
+	unsigned long mode;
+
+	rc = strict_strtoul(buf, 10, &mode);
+	if (rc)
+		return rc;
+
+	mutex_lock(&dd->motion.mutex);
+	if (dd->motion.mode[BMA250_MOTION_SLOPE] != mode)
+		rc = bma250_motion_mode(dd, BMA250_MOTION_SLOPE, (int)mode);
+	mutex_unlock(&dd->motion.mutex);
+
+	return rc ? rc : count;
+}
+
+static ssize_t bma250_slope_param_show(struct device *dev,
+					struct device_attribute	*attr,
+					char *buf)
+{
+	struct driver_data *dd = dev_get_drvdata(dev);
+
+	return snprintf(buf, PAGE_SIZE, "%d %d\n",
+		dd->motion.slope_duration, dd->motion.slope_threshold);
+}
+
+static ssize_t bma250_slope_param_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct driver_data *dd = dev_get_drvdata(dev);
+	int rc;
+	unsigned int dur, thr;
+
+	rc = sscanf(buf, "%10u %10u", &dur, &thr);
+	if ((rc != 2) ||
+		(dur & ~BMA250_SLOPE_DUR_MASK) ||
+		(thr & ~0xFF))
+		return -EINVAL;
+
+	mutex_lock(&dd->motion.mutex);
+
+	dd->motion.slope_duration = dur;
+	dd->motion.slope_threshold = thr;
+
+	if (dd->power) {
+		rc = bma250_ic_write(dd->ic_dev, BMA250_SLOPE_DUR_REG, dur);
+		if (!rc)
+			rc = bma250_ic_write(dd->ic_dev, BMA250_SLOPE_THR_REG, thr);
+	} else {
+		rc = 0;
+	}
+	mutex_unlock(&dd->motion.mutex);
+
+	return rc ? rc : count;
+}
+
+static ssize_t bma250_low_g_mode_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct driver_data *dd = dev_get_drvdata(dev);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", dd->motion.mode[BMA250_MOTION_LOW_G]);
+}
+
+static ssize_t bma250_low_g_mode_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct driver_data *dd = dev_get_drvdata(dev);
+	int rc;
+	unsigned long mode;
+
+	rc = strict_strtoul(buf, 10, &mode);
+	if (rc)
+		return rc;
+
+	mutex_lock(&dd->motion.mutex);
+	if (dd->motion.mode[BMA250_MOTION_LOW_G] != mode)
+		rc = bma250_motion_mode(dd, BMA250_MOTION_LOW_G, (int)mode);
+	mutex_unlock(&dd->motion.mutex);
+
+	return rc ? rc : count;
+}
+
+static ssize_t bma250_low_g_param_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct driver_data *dd = dev_get_drvdata(dev);
+
+	return snprintf(buf, PAGE_SIZE, "%d %d %d\n",
+		dd->motion.low_g_duration, dd->motion.low_g_threshold, dd->motion.low_g_hysteresis);
+}
+
+static ssize_t bma250_low_g_param_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct driver_data *dd = dev_get_drvdata(dev);
+	int rc;
+	unsigned int dur, thr, hy;
+
+	rc = sscanf(buf, "%10u %10u %10u", &dur, &thr, &hy);
+	if ((rc != 3) || (dur & ~0xFF) || (thr & ~0xFF) || (hy & ~BMA250_LOW_G_HY_MASK))
+		return -EINVAL;
+
+	mutex_lock(&dd->motion.mutex);
+
+	dd->motion.low_g_duration = dur;
+	dd->motion.low_g_threshold	= thr;
+	dd->motion.low_g_hysteresis = hy;
+
+	if (dd->power) {
+		rc = bma250_ic_write(dd->ic_dev, BMA250_LOW_G_DUR_REG, dur);
+		if (!rc)
+			rc = bma250_ic_write(dd->ic_dev, BMA250_LOW_G_THR_REG, thr);
+		if (!rc)
+			rc = bma250_ic_write(dd->ic_dev, BMA250_G_MODE_REG,
+					hy | dd->motion.high_g_hysteresis);
+	} else {
+		rc = 0;
+	}
+	mutex_unlock(&dd->motion.mutex);
+
+	return rc ? rc : count;
+}
+
+static ssize_t bma250_high_g_mode_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct driver_data *dd = dev_get_drvdata(dev);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", dd->motion.mode[BMA250_MOTION_HIGH_G]);
+}
+
+static ssize_t bma250_high_g_mode_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct driver_data *dd = dev_get_drvdata(dev);
+	int	rc;
+	unsigned long mode;
+
+	rc = strict_strtoul(buf, 10, &mode);
+	if (rc)
+		return rc;
+
+	mutex_lock(&dd->motion.mutex);
+	if (dd->motion.mode[BMA250_MOTION_HIGH_G] != mode)
+		rc = bma250_motion_mode(dd, BMA250_MOTION_HIGH_G, (int)mode);
+	mutex_unlock(&dd->motion.mutex);
+
+	return rc ? rc : count;
+}
+
+static ssize_t bma250_high_g_param_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct driver_data *dd = dev_get_drvdata(dev);
+
+	return snprintf(buf, PAGE_SIZE, "%d %d %d\n",
+		dd->motion.high_g_duration, dd->motion.high_g_threshold, dd->motion.high_g_hysteresis);
+}
+
+static ssize_t bma250_high_g_param_store(struct	device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct driver_data *dd = dev_get_drvdata(dev);
+	int rc;
+	unsigned int dur, thr, hy;
+
+	rc = sscanf(buf, "%10u %10u %10u", &dur, &thr, &hy);
+	if ((rc	!= 3) || (dur & ~0xFF) || (thr & ~0xFF) || (hy & ~BMA250_HIGH_G_HY_MASK))
+		return -EINVAL;
+
+	mutex_lock(&dd->motion.mutex);
+
+	dd->motion.high_g_duration = dur;
+	dd->motion.high_g_threshold = thr;
+	dd->motion.high_g_hysteresis = hy;
+
+	if (dd->power) {
+		rc = bma250_ic_write(dd->ic_dev, BMA250_HIGH_G_DUR_REG, dur);
+		if (!rc)
+			rc = bma250_ic_write(dd->ic_dev, BMA250_HIGH_G_THR_REG, thr);
+		if (!rc)
+			rc = bma250_ic_write(dd->ic_dev, BMA250_G_MODE_REG,
+					hy | dd->motion.low_g_hysteresis);
+	} else {
+		rc = 0;
+	}
+	mutex_unlock(&dd->motion.mutex);
+
+	return rc ? rc : count;
+}
+
+static ssize_t bma250_flat_param_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct driver_data *dd = dev_get_drvdata(dev);
+
+	return snprintf(buf, PAGE_SIZE, "%d %d\n", dd->motion.flat_theta, dd->motion.flat_hold);
+}
+
+static ssize_t bma250_flat_param_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct driver_data *dd = dev_get_drvdata(dev);
+	int rc;
+	unsigned int flat_theta, flat_hold;
+
+	rc = sscanf(buf, "%10u %10u", &flat_theta, &flat_hold);
+	if ((rc != 2) ||
+		(flat_theta & ~BMA250_FLAT_THETA_MASK) ||
+		(flat_hold & ~BMA250_FLAT_HOLD_MASK))
+		return -EINVAL;
+
+	dd->motion.flat_theta = flat_theta;
+	dd->motion.flat_hold = flat_hold;
+
+	mutex_lock(&dd->motion.mutex);
+	if (dd->power) {
+		rc = bma250_ic_write(dd->ic_dev, BMA250_FLAT_THETA_REG, dd->motion.flat_theta);
+		if (!rc)
+			rc = bma250_ic_write(dd->ic_dev, BMA250_FLAT_HOLD_REG, dd->motion.flat_hold);
+	} else {
+		rc = 0;
+	}
+	mutex_unlock(&dd->motion.mutex);
+
+	return rc ? rc : count;
+}
+#endif /* CONFIG_INPUT_BMA250_MOTION */
+
 static struct device_attribute attributes[] = {
 	__ATTR(bma250_rate, 0644, bma250_rate_show, bma250_rate_store),
 };
 
-static int add_sysfs_interfaces(struct device *dev)
+#ifdef CONFIG_INPUT_BMA250_MOTION
+static struct device_attribute attributes_motion[] = {
+	__ATTR(tap_mode, 0644, bma250_tap_mode_show, bma250_tap_mode_store),
+	__ATTR(tap_param, 0644,	bma250_tap_param_show, bma250_tap_param_store),
+	__ATTR(slope_mode, 0644, bma250_slope_mode_show, bma250_slope_mode_store),
+	__ATTR(slope_param,	0644, bma250_slope_param_show, bma250_slope_param_store),
+	__ATTR(low_g_mode, 0644, bma250_low_g_mode_show, bma250_low_g_mode_store),
+	__ATTR(low_g_param,	0644, bma250_low_g_param_show, bma250_low_g_param_store),
+	__ATTR(high_g_mode,	0644, bma250_high_g_mode_show, bma250_high_g_mode_store),
+	__ATTR(high_g_param, 0644, bma250_high_g_param_show, bma250_high_g_param_store),
+	__ATTR(flat_param, 0644, bma250_flat_param_show, bma250_flat_param_store),
+};
+#endif
+
+static int add_sysfs_interfaces(struct device *dev, struct device_attribute *attrs, int size)
 {
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(attributes); i++)
-		if (device_create_file(dev, attributes + i))
+	for (i = 0; i < size; i++)
+		if (device_create_file(dev, attrs + i))
 			goto undo;
 	return 0;
 undo:
 	for (; i >= 0 ; i--)
-		device_remove_file(dev, attributes + i);
+		device_remove_file(dev, attrs + i);
 	dev_err(dev, "%s: failed to create sysfs interface\n", __func__);
 	return -ENODEV;
 }
 
-static void remove_sysfs_interfaces(struct device *dev)
+static void remove_sysfs_interfaces(struct device *dev, struct device_attribute *attrs, int size)
 {
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(attributes); i++)
-		device_remove_file(dev, attributes + i);
+	for (i = 0; i < size; i++)
+		device_remove_file(dev, attrs + i);
 }
 
 #if defined(CONFIG_DEBUG_FS)
@@ -569,9 +1268,19 @@ static int bma250_power_down(struct driver_data *dd)
 	char                bypass = 0;
 	struct bma250_platform_data *pdata = dd->ic_dev->dev.platform_data;
 
-	cancel_delayed_work_sync(&dd->work_data);
-
 	mutex_lock(&bma250_power_lock);
+
+#ifdef CONFIG_INPUT_BMA250_MOTION
+	if (dd->motion.power || !dd->power) {
+		mutex_unlock(&bma250_power_lock);
+		return 0;
+	}
+
+	
+	free_irq(dd->ic_dev->irq, dd);
+#endif /* CONFIG_INPUT_BMA250_MOTION */
+
+	cancel_delayed_work_sync(&dd->work_data);
 
 	if (slave_hw) {
 		pdata->vote_sleep_status(BMA250_SLAVE1, BMA250_SLEEP);
@@ -602,6 +1311,13 @@ static int bma250_power_up(struct driver_data *dd)
 
 	mutex_lock(&bma250_power_lock);
 
+#ifdef CONFIG_INPUT_BMA250_MOTION
+	if (dd->power) {
+		mutex_unlock(&bma250_power_lock);
+		return 0;
+	}
+#endif
+
 	if (slave_hw) {
 		pdata->bypass_state(READ_BYPASS_STATE, &bypass);
 		if (!bypass) {
@@ -621,7 +1337,6 @@ static int bma250_power_up(struct driver_data *dd)
 					goto power_up_error;
 			}
 		}
-		pdata->vote_sleep_status(BMA250_SLAVE1, BMA250_AWAKE);
 	} else {
 		rc = bma250_hw_setup(dd);
 		if (rc)
@@ -636,6 +1351,63 @@ static int bma250_power_up(struct driver_data *dd)
 		if (rc)
 			goto power_up_error;
 	}
+
+#ifdef CONFIG_INPUT_BMA250_MOTION
+	rc = bma250_ic_write(dd->ic_dev, BMA250_TAP_DUR_REG, dd->motion.tap_duration);
+	if (rc)
+		goto power_up_error;
+	rc = bma250_ic_write(dd->ic_dev, BMA250_TAP_THR_REG, dd->motion.tap_threshold);
+	if (rc)
+		goto power_up_error;
+	rc = bma250_ic_write(dd->ic_dev, BMA250_SLOPE_DUR_REG, dd->motion.slope_duration);
+	if (rc)
+		goto power_up_error;
+	rc = bma250_ic_write(dd->ic_dev, BMA250_SLOPE_THR_REG, dd->motion.slope_threshold);
+	if (rc)
+		goto power_up_error;
+	rc = bma250_ic_write(dd->ic_dev, BMA250_LOW_G_DUR_REG, dd->motion.low_g_duration);
+	if (rc)
+		goto power_up_error;
+	rc = bma250_ic_write(dd->ic_dev, BMA250_LOW_G_THR_REG, dd->motion.low_g_threshold);
+	if (rc)
+		goto power_up_error;
+	rc = bma250_ic_write(dd->ic_dev, BMA250_HIGH_G_DUR_REG,	dd->motion.high_g_duration);
+	if (rc)
+		goto power_up_error;
+	rc = bma250_ic_write(dd->ic_dev, BMA250_HIGH_G_THR_REG,	dd->motion.high_g_threshold);
+	if (rc)
+		goto power_up_error;
+	rc = bma250_ic_write(dd->ic_dev, BMA250_G_MODE_REG,
+				dd->motion.low_g_hysteresis | dd->motion.high_g_hysteresis);
+	if (rc)
+		goto power_up_error;
+	rc = bma250_ic_write(dd->ic_dev, BMA250_FLAT_THETA_REG,	dd->motion.flat_theta);
+	if (rc)
+		goto power_up_error;
+	rc = bma250_ic_write(dd->ic_dev, BMA250_FLAT_HOLD_REG, dd->motion.flat_hold);
+	if (rc)
+		goto power_up_error;
+
+	rc = bma250_ic_write(dd->ic_dev, BMA250_INT_CONFIG_REG,
+			BMA250_INT_PIN1_LEVEL |	BMA250_INT_PIN2_LEVEL);
+	if (rc)
+		goto power_up_error;
+	rc = bma250_ic_write(dd->ic_dev, BMA250_INT_PIN1_REG, BMA250_INT_PIN1_MASK);
+	if (rc)
+		goto power_up_error;
+	rc = bma250_ic_write(dd->ic_dev, BMA250_INT_CTRL_REG,
+			BMA250_INT_RESET | BMA250_INT_LATCHED);
+	if (rc)
+		goto power_up_error;
+
+	rc = request_threaded_irq(dd->ic_dev->irq, NULL, bma250_motion_thread_irq,
+				IRQF_TRIGGER_HIGH | IRQF_ONESHOT, dd->ic_dev->name, dd);
+	if (rc)
+		goto power_up_error;
+#endif /* CONFIG_INPUT_BMA250_MOTION */
+
+	if (slave_hw)
+		pdata->vote_sleep_status(BMA250_SLAVE1, BMA250_AWAKE);
 
 	dd->power = true;
 	mutex_unlock(&bma250_power_lock);
@@ -710,15 +1482,27 @@ static int bma250_suspend(struct i2c_client *ic_dev, pm_message_t mesg)
 {
 	struct driver_data *dd = bma250_ic_get_data(ic_dev);
 
+#ifdef CONFIG_INPUT_BMA250_MOTION
+	mutex_lock(&dd->motion.mutex);
+	bma250_motion_suspend(dd, true);
+	if (dd->motion.power) {
+		disable_irq(dd->ic_dev->irq);
+		if (device_may_wakeup(&dd->ic_dev->dev))
+			enable_irq_wake(dd->ic_dev->irq);
+
+		mutex_unlock(&dd->motion.mutex);
+		return 0;
+	}
+	mutex_unlock(&dd->motion.mutex);
+
+	bma250_power_down(dd);
+#else
 	if (dd->ip_dev->users)
 		bma250_power_down(dd);
+#endif
 
 	dd->pdata->power_mode(0);
-
-#ifdef CONFIG_INPUT_BMA250_MOTION
-	if (dd->motion_dev)
-		bma250_motion_suspend(dd->motion_dev);
-#endif
+	
 	return 0;
 }
 
@@ -728,8 +1512,17 @@ static int bma250_resume(struct i2c_client *ic_dev)
 	int rc = 0;
 
 #ifdef CONFIG_INPUT_BMA250_MOTION
-	if (dd->motion_dev)
-		bma250_motion_resume(dd->motion_dev);
+	mutex_lock(&dd->motion.mutex);
+	if (dd->motion.power) {
+		if (device_may_wakeup(&dd->ic_dev->dev))
+			disable_irq_wake(dd->ic_dev->irq);
+		enable_irq(dd->ic_dev->irq);
+
+		bma250_motion_suspend(dd, false);
+		mutex_unlock(&dd->motion.mutex);
+		return 0;
+	}
+	mutex_unlock(&dd->motion.mutex);
 #endif
 
 	dd->pdata->power_mode(1);
@@ -741,6 +1534,13 @@ static int bma250_resume(struct i2c_client *ic_dev)
 		rc = bma250_config(dd, TRUE, TRUE);
 		schedule_delayed_work(&dd->work_data, dd->delay_jiffies);
 	}
+
+#ifdef CONFIG_INPUT_BMA250_MOTION
+	mutex_lock(&dd->motion.mutex);
+	bma250_motion_suspend(dd, false);
+	mutex_unlock(&dd->motion.mutex);
+#endif
+
 	return rc;
 }
 #else /* !CONFIG_PM */
@@ -879,6 +1679,9 @@ static int __devinit bma250_probe(struct i2c_client *ic_dev,
 {
 	struct driver_data *dd;
 	int                 rc;
+#ifdef CONFIG_INPUT_BMA250_MOTION
+	int i;
+#endif
 	struct bma250_platform_data *pdata = ic_dev->dev.platform_data;
 
 	if (!pdata || !pdata->power_mode || !pdata->hw_config ||
@@ -955,7 +1758,7 @@ static int __devinit bma250_probe(struct i2c_client *ic_dev,
 		goto probe_err_reg;
 	}
 
-	rc = add_sysfs_interfaces(&dd->ip_dev->dev);
+	rc = add_sysfs_interfaces(&dd->ip_dev->dev, attributes, ARRAY_SIZE(attributes));
 	if (rc)
 		goto probe_err_sysfs;
 
@@ -964,12 +1767,59 @@ static int __devinit bma250_probe(struct i2c_client *ic_dev,
 		goto probe_err_notifier;
 
 #ifdef CONFIG_INPUT_BMA250_MOTION
-	dd->motion_dev = bma250_motion_probe(ic_dev);
-#endif
+	for (i = 0; i < BMA250_MOTION_COUNT; i++) {
+		dd->motion.gap_work[i].dd = dd;
+		dd->motion.gap_work[i].motion = i;
+		INIT_DELAYED_WORK(&dd->motion.gap_work[i].work, bma250_motion_gap_work);
+	}
+	mutex_init(&dd->motion.mutex);
+	dd->motion.tap_duration = BMA250_TAP_DURATION_DEFAULT;
+	dd->motion.tap_threshold = BMA250_TAP_THRESHOLD_DEFAULT;
+	dd->motion.slope_duration = BMA250_SLOPE_DURATION_DEFAULT;
+	dd->motion.slope_threshold = BMA250_SLOPE_THRESHOLD_DEFAULT;
+	dd->motion.low_g_duration = BMA250_LOW_G_DURATION_DEFAULT;
+	dd->motion.low_g_threshold = BMA250_LOW_G_THRESHOLD_DEFAULT;
+	dd->motion.low_g_hysteresis = BMA250_LOW_G_HYSTERESIS_DEFAULT;
+	dd->motion.high_g_duration = BMA250_HIGH_G_DURATION_DEFAULT;
+	dd->motion.high_g_threshold = BMA250_HIGH_G_THRESHOLD_DEFAULT;
+	dd->motion.high_g_hysteresis = BMA250_HIGH_G_HYSTERESIS_DEFAULT;
+	dd->motion.flat_theta = BMA250_FLAT_THETA_DEFAULT;
+	dd->motion.flat_hold = BMA250_FLAT_HOLD_DEFAULT;
+
+	dd->motion.ip_dev = input_allocate_device();
+	if (!dd->motion.ip_dev) {
+		rc = -ENOMEM;
+		goto probe_motion_err_reg;
+	}
+	input_set_drvdata(dd->motion.ip_dev, dd);
+	dd->motion.ip_dev->name = BMA250_MOTION_NAME;
+	dd->motion.ip_dev->id.vendor = BMA250_MOTION_VENDORID;
+	dd->motion.ip_dev->id.product = 1;
+	dd->motion.ip_dev->id.version = 1;
+	input_set_capability(dd->motion.ip_dev, EV_KEY, KEY_POWER);
+	input_set_capability(dd->motion.ip_dev, EV_ABS, ABS_MISC);
+	input_set_abs_params(dd->motion.ip_dev, ABS_MISC, 0, 0xFF, 0, 0);
+
+	rc = input_register_device(dd->motion.ip_dev);
+	if (rc) {
+		input_free_device(dd->motion.ip_dev);
+		goto probe_motion_err_reg;
+	}
+
+	rc = add_sysfs_interfaces(&dd->motion.ip_dev->dev, attributes_motion, ARRAY_SIZE(attributes_motion));
+	if (rc)
+		goto probe_motion_err_sysfs;
+
+	device_init_wakeup(&dd->ic_dev->dev, true);
+
+#endif /* CONFIG_INPUT_BMA250_MOTION */
 	return rc;
 
+probe_motion_err_sysfs:
+	input_unregister_device(dd->motion.ip_dev);
+probe_motion_err_reg:
 probe_err_notifier:
-	remove_sysfs_interfaces(&dd->ip_dev->dev);
+	remove_sysfs_interfaces(&dd->ip_dev->dev, attributes, ARRAY_SIZE(attributes));
 probe_err_sysfs:
 	input_unregister_device(dd->ip_dev);
 probe_err_reg:
@@ -993,8 +1843,18 @@ static int __devexit bma250_remove(struct i2c_client *ic_dev)
 	int                 rc;
 
 #ifdef CONFIG_INPUT_BMA250_MOTION
-	if (dd->motion_dev)
-		bma250_motion_remove(dd->motion_dev);
+	int i;
+
+	device_init_wakeup(&dd->ic_dev->dev, false);
+
+	for (i = 0; i < BMA250_MOTION_COUNT; i++) {
+		rc = bma250_motion_mode(dd, i, 0);
+		if (rc)
+			pr_err(BMA250_MOTION_NAME": remove failed with error %d\n", rc);
+	}
+
+	remove_sysfs_interfaces(&dd->motion.ip_dev->dev, attributes_motion, ARRAY_SIZE(attributes_motion));
+	input_unregister_device(dd->motion.ip_dev);
 #endif
 
 	rc = bma250_power_down(dd);
@@ -1003,7 +1863,7 @@ static int __devexit bma250_remove(struct i2c_client *ic_dev)
 			"%s: power down failed with error %d\n",
 			__func__, rc);
 	dd->pdata->power_mode(0);
-	remove_sysfs_interfaces(&dd->ip_dev->dev);
+	remove_sysfs_interfaces(&dd->ip_dev->dev, attributes, ARRAY_SIZE(attributes));
 	input_unregister_device(dd->ip_dev);
 	bma250_remove_dbfs_entry(dd);
 	bma250_ic_set_data(ic_dev, NULL);
