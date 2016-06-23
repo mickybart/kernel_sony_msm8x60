@@ -43,6 +43,9 @@
 #include "mdp4.h"
 #endif
 #include "mipi_dsi.h"
+#ifdef CONFIG_FB_MSM_MDP_LUT
+#include "mdp_kcal_ctrl.h"
+#endif
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #undef CONFIG_HAS_EARLYSUSPEND
@@ -260,52 +263,57 @@ static uint32_t lcd_color_preset_lut[256] = {
 #define lut2g(lut) ((lut & G_MASK) >> G_SHIFT)
 #define lut2b(lut) ((lut & B_MASK) >> B_SHIFT)
 
-#define NUM_QLUT  256
-#define MAX_KCAL_V (NUM_QLUT-1)
 #define scaled_by_kcal(rgb, kcal) \
                 (((((unsigned int)(rgb) * (unsigned int)(kcal)) << 16) / \
                 (unsigned int)MAX_KCAL_V) >> 16)
 
-static int kcal_r = 255;
-static int kcal_g = 255;
-static int kcal_b = 255;
+static int kcal_r = MAX_KCAL_V;
+static int kcal_g = MAX_KCAL_V;
+static int kcal_b = MAX_KCAL_V;
+
+static int kcal_r_max = MAX_KCAL_V;
+static int kcal_g_max = MAX_KCAL_V;
+static int kcal_b_max = MAX_KCAL_V;
+
+static bool kcal_enable = false;
+
 int mdp_preset_lut_update_lcdc(struct fb_cmap *cmap, uint32_t *internal_lut);
 
-static void kcal_tuning_apply(void) {
+static void mdp_pp_kcal_apply(void) {
 	struct fb_cmap cmap;
 
 	cmap.start = 0;
 	cmap.len = 256;
 	cmap.transp = NULL;
 
-	cmap.red = (uint16_t *)&(kcal_r);
-	cmap.green = (uint16_t *)&(kcal_g);
-	cmap.blue = (uint16_t *)&(kcal_b);
-
+	if (kcal_enable) {
+		cmap.red = (uint16_t *)&(kcal_r);
+		cmap.green = (uint16_t *)&(kcal_g);
+		cmap.blue = (uint16_t *)&(kcal_b);
+	} else {
+		cmap.red = (uint16_t *)&(kcal_r_max);
+		cmap.green = (uint16_t *)&(kcal_g_max);
+		cmap.blue = (uint16_t *)&(kcal_b_max);
+	}
+	
 	mdp_preset_lut_update_lcdc(&cmap, lcd_color_preset_lut);
 }
 
-static ssize_t kcal_store(struct device *dev, struct device_attribute *attr,
-		const char *buf, size_t count)
-{
-	if (!count)
-		return -EINVAL;
+void mdp_pp_kcal_enable(bool enable) {
+	if (kcal_enable == enable)
+		return;
 
-
-	sscanf(buf, "%d %d %d", &kcal_r, &kcal_g, &kcal_b);
-
-	kcal_tuning_apply();
-
-	return count;
+	kcal_enable = enable;
+	mdp_pp_kcal_apply();
 }
 
-static ssize_t kcal_show(struct device *dev, struct device_attribute *attr,
-                                                                char *buf)
-{
-        return sprintf(buf, "%d %d %d\n", kcal_r, kcal_g, kcal_b);
+void mdp_pp_kcal_update(int kr, int kg, int kb) {
+	kcal_r = kr;
+	kcal_g = kg;
+	kcal_b = kb;
+	
+	mdp_pp_kcal_apply();
 }
-
-static DEVICE_ATTR(kcal, 0644, kcal_show, kcal_store);
 
 #endif
 
@@ -2614,7 +2622,7 @@ static int mdp_on(struct platform_device *pdev)
 	pr_debug("%s:-\n", __func__);
 
 #ifdef CONFIG_FB_MSM_MDP_LUT
-	kcal_tuning_apply();
+	mdp_pp_kcal_apply();
 #endif
 
 	return ret;
@@ -3437,9 +3445,6 @@ static int mdp_probe(struct platform_device *pdev)
 			mfd->vsync_sysfs_created = 1;
 		}
 	}
-#ifdef CONFIG_FB_MSM_MDP_LUT
-	rc = device_create_file(&pdev->dev, &dev_attr_kcal);
-#endif
 	return 0;
 
       mdp_probe_err:
@@ -3548,9 +3553,6 @@ static int mdp_remove(struct platform_device *pdev)
 		msm_bus_scale_unregister_client(mdp_bus_scale_handle);
 		mdp_bus_scale_handle = 0;
 	}
-#endif
-#ifdef CONFIG_FB_MSM_MDP_LUT
-	device_remove_file(&pdev->dev, &dev_attr_kcal);
 #endif
 	return 0;
 }
