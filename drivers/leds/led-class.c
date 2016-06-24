@@ -39,7 +39,10 @@ static ssize_t led_brightness_show(struct device *dev,
 	/* no lock needed for this */
 	led_update_brightness(led_cdev);
 
-	return snprintf(buf, LED_BUFF_SIZE, "%u\n", led_cdev->brightness);
+	if (led_cdev->requested_brightness > led_cdev->max_brightness)
+		return snprintf(buf, LED_BUFF_SIZE, "%u (requested: %u)\n", led_cdev->brightness, led_cdev->requested_brightness);
+	else
+		return snprintf(buf, LED_BUFF_SIZE, "%u\n", led_cdev->brightness);
 }
 
 static ssize_t led_brightness_store(struct device *dev,
@@ -78,7 +81,7 @@ static ssize_t led_max_brightness_store(struct device *dev,
 		if (state > LED_FULL)
 			state = LED_FULL;
 		led_cdev->max_brightness = state;
-		led_set_brightness(led_cdev, led_cdev->brightness);
+		led_set_brightness(led_cdev, led_cdev->requested_brightness);
 	}
 
 	return ret;
