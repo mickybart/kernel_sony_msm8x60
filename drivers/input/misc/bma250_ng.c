@@ -1452,6 +1452,15 @@ static int bma250_config(struct driver_data *dd, int bw, int range)
 	char                bypass = 0;
 	struct bma250_platform_data *pdata = dd->ic_dev->dev.platform_data;
 
+#ifdef CONFIG_INPUT_BMA250_MOTION
+	mutex_lock(&dd->motion.mutex);
+	if (dd->motion.power) {
+		mutex_unlock(&dd->motion.mutex);
+		return 0;
+	}
+	mutex_unlock(&dd->motion.mutex);
+#endif
+
 	if (slave_hw)
 		pdata->bypass_state(READ_BYPASS_STATE, &bypass);
 
