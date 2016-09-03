@@ -59,6 +59,21 @@ static ssize_t kcal_store(struct device *dev, struct device_attribute *attr,
 	if (kcal_b < 0 || kcal_b > 256)
 		return -EINVAL;
 
+	/*
+	 * each color use 8 bits (0 to 255) but
+	 * some well known programs use 257 values (0 to 256).
+	 * We only support 256 values, so to stay compatible we
+	 * simply accept the value 256 but we store it as 255
+	 */ 
+	if (kcal_r == 256)
+		kcal_r--;
+
+	if (kcal_g == 256)
+		kcal_g--;
+
+	if (kcal_b == 256)
+		kcal_b--;
+
 	lut_data->red = kcal_r;
 	lut_data->green = kcal_g;
 	lut_data->blue = kcal_b;
@@ -90,6 +105,15 @@ static ssize_t kcal_min_store(struct device *dev,
 
 	if (kcal_min < 0 || kcal_min > 256)
 		return -EINVAL;
+
+	/*
+	 * each color use 8 bits (0 to 255) but
+	 * some well known programs use 257 values (0 to 256).
+	 * We only support 256 values, so to stay compatible we
+	 * simply accept the value 256 but we store it as 255
+	 */ 
+	if (kcal_min == 256)
+		kcal_min--;
 
 	lut_data->minimum = kcal_min;
 
