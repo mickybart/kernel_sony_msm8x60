@@ -132,6 +132,9 @@ static ssize_t simple_remote_attrs_store_property(struct device *dev,
 #define SIMPLE_REMOTE_TRIG_PRD_T_NAME "btn_trig_period_time"
 #define SIMPLE_REMOTE_TRIG_HST_F_NAME "btn_trig_hyst_freq"
 #define SIMPLE_REMOTE_TRIG_HST_T_NAME "btn_trig_hyst_time"
+#define SIMPLE_REMOTE_DET_BROKEN "det_broken"
+#define SIMPLE_REMOTE_DET_FORCE "det_force"
+#define SIMPLE_REMOTE_DET_TYPE "det_type"
 #define MAX_ATTRS_NAME_LEN 32
 
 static struct device_attribute simple_remote_attrs[] = {
@@ -144,6 +147,9 @@ static struct device_attribute simple_remote_attrs[] = {
 	SIMPLE_REMOTE_ATTR(SIMPLE_REMOTE_TRIG_PRD_T_NAME),
 	SIMPLE_REMOTE_ATTR(SIMPLE_REMOTE_TRIG_HST_F_NAME),
 	SIMPLE_REMOTE_ATTR(SIMPLE_REMOTE_TRIG_HST_T_NAME),
+	SIMPLE_REMOTE_ATTR(SIMPLE_REMOTE_DET_BROKEN),
+	SIMPLE_REMOTE_ATTR(SIMPLE_REMOTE_DET_FORCE),
+	SIMPLE_REMOTE_ATTR(SIMPLE_REMOTE_DET_TYPE),
 };
 
 struct simple_remote_driver {
@@ -158,6 +164,11 @@ struct simple_remote_driver {
 	u8 nodetect_cycles;
 	u8 num_supported_hs_det;
 	u8 num_headphone_det;
+
+    //for broken jack detection
+    u8 det_broken;
+    u8 det_force;
+    u8 det_type;
 
 	enum dev_state current_accessory_state;
 
@@ -178,6 +189,7 @@ struct simple_remote_driver {
 	struct wake_lock lock;
 };
 
+static void simple_remote_report_accessory_type(struct simple_remote_driver *jack);
 
 static int simple_remote_attrs_set_data_buffer(char *buf, const int *array,
 					       int array_len)
@@ -261,6 +273,19 @@ static ssize_t simple_remote_attrs_show_property(struct device *dev,
 	else if (!strncmp(SIMPLE_REMOTE_TRIG_HST_T_NAME, attr->attr.name,
 			  MAX_ATTRS_NAME_LEN))
 		retval = jack->interface->get_hysteresis_time(&val);
+	else if (!strncmp(SIMPLE_REMOTE_DET_BROKEN, attr->attr.name,
+			  MAX_ATTRS_NAME_LEN)) {
+        val = jack->det_broken;
+        retval = 0;
+    } else if (!strncmp(SIMPLE_REMOTE_DET_FORCE, attr->attr.name,
+			  MAX_ATTRS_NAME_LEN)) {
+		val = jack->det_force;
+        retval = 0;
+    } else if (!strncmp(SIMPLE_REMOTE_DET_TYPE, attr->attr.name,
+			  MAX_ATTRS_NAME_LEN)) {
+		val = jack->det_type;
+        retval = 0;
+    }
 
 	if (!retval)
 		retval = scnprintf(buf, PAGE_SIZE, "%d\n", val);
@@ -370,6 +395,55 @@ static ssize_t simple_remote_attrs_store_property(struct device *dev,
 		else if (!strncmp(SIMPLE_REMOTE_TRIG_HST_T_NAME,
 				  attr->attr.name, MAX_ATTRS_NAME_LEN))
 			ret = jack->interface->set_hysteresis_time(val);
+        else if (!strncmp(SIMPLE_REMOTE_DET_BROKEN,
+                  attr->attr.name, MAX_ATTRS_NAME_LEN)) {
+            ret = -EINVAL;
+            if (val <= 1 && jack->det_broken != val) {
+                //new value
+                jack->det_broken = val;
+                
+                if (!jack->det_broken) {
+                    //reset force setting
+                    jack->det_force = 0;
+                    
+                    //if a client is connected, re-enable automatic plug_detect_interrupt
+                    if (jack->client_counter)
+                        jack->interface->register_plug_detect_interrupt
+                            (&simple_remote_detect_irq_handler, jack);
+                } else {
+                    //detection is broken so disable automatic plug_detect_interrupt
+                    jack->interface->unregister_plug_detect_interrupt(jack);
+                    
+                    //As detection state is broken we don't no the state of the plug
+                    //so we consider that we have no state update to do.
+                    //All will be done by det_force
+                }
+                
+                ret = 0;
+            }
+        } else if (!strncmp(SIMPLE_REMOTE_DET_FORCE,
+                  attr->attr.name, MAX_ATTRS_NAME_LEN)) {
+            ret = -EINVAL;
+            if (val <= 1 && jack->det_broken && jack->det_force != val) {
+                //new value
+                jack->det_force = val;
+                
+                if (val)
+                    jack->new_accessory_state = jack->det_type;
+                else
+                    jack->new_accessory_state = NO_DEVICE;
+                simple_remote_report_accessory_type(jack);
+        
+                ret = 0;
+            }
+        } else if (!strncmp(SIMPLE_REMOTE_DET_TYPE,
+                  attr->attr.name, MAX_ATTRS_NAME_LEN)) {
+            ret = -EINVAL;
+            if (!jack->det_force && (val == DEVICE_HEADSET || val == DEVICE_HEADPHONE)) {
+                jack->det_type = val;
+                ret = 0;
+            }
+        }
 	}
 
 done:
@@ -561,11 +635,11 @@ static int simple_remote_open(struct input_dev *dev)
 	struct simple_remote_driver *jack = input_get_drvdata(dev);
 
 	mutex_lock(&jack->simple_remote_mutex);
-	if (!jack->client_counter) {
+	if (!jack->client_counter && !jack->det_broken) {
 		dev_dbg(jack->dev, "Starting interrupt handling.");
 
-		err = jack->interface->register_plug_detect_interrupt
-			(&simple_remote_detect_irq_handler, jack);
+        err = jack->interface->register_plug_detect_interrupt
+            (&simple_remote_detect_irq_handler, jack);
 
 		if (!err) {
 			/* This will force an initial detection to
@@ -635,7 +709,7 @@ static void simple_remote_plug_det_work(struct work_struct *work)
 
 	dev_vdbg(jack->dev, "%s - Called\n", __func__);
 
-	jack->interface->get_current_plug_status(&getgpiovalue);
+    jack->interface->get_current_plug_status(&getgpiovalue);
 
 	if (!getgpiovalue) {
 		jack->interface->enable_mic_bias(1);
@@ -804,6 +878,12 @@ static int initialize_hardware(struct simple_remote_driver *jack)
 
 	err |= jack->interface->set_trig_level(
 		simple_remote_btn_trig_level[0]);
+    
+    //We consider that jack detection is not broken
+    //and if it is broken, that we plug a headset by default
+    jack->det_broken = 0;
+    jack->det_force = 0;
+    jack->det_type = DEVICE_HEADSET;
 
 	return err;
 }
