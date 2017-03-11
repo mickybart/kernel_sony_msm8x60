@@ -651,10 +651,6 @@ err:
 	return ret;
 }
 
-static struct global_attr target_loads_attr =
-	__ATTR(target_loads, S_IRUGO | S_IWUSR,
-		show_target_loads, store_target_loads);
-
 static ssize_t show_hispeed_freq(struct kobject *kobj,
 				 struct attribute *attr, char *buf)
 {
@@ -675,10 +671,6 @@ static ssize_t store_hispeed_freq(struct kobject *kobj,
 	return count;
 }
 
-static struct global_attr hispeed_freq_attr = __ATTR(hispeed_freq, 0644,
-		show_hispeed_freq, store_hispeed_freq);
-
-
 static ssize_t show_go_hispeed_load(struct kobject *kobj,
 				     struct attribute *attr, char *buf)
 {
@@ -698,9 +690,6 @@ static ssize_t store_go_hispeed_load(struct kobject *kobj,
 	return count;
 }
 
-static struct global_attr go_hispeed_load_attr = __ATTR(go_hispeed_load, 0644,
-		show_go_hispeed_load, store_go_hispeed_load);
-
 static ssize_t show_min_sample_time(struct kobject *kobj,
 				struct attribute *attr, char *buf)
 {
@@ -719,9 +708,6 @@ static ssize_t store_min_sample_time(struct kobject *kobj,
 	min_sample_time = val;
 	return count;
 }
-
-static struct global_attr min_sample_time_attr = __ATTR(min_sample_time, 0644,
-		show_min_sample_time, store_min_sample_time);
 
 static ssize_t show_above_hispeed_delay(struct kobject *kobj,
 					struct attribute *attr, char *buf)
@@ -743,8 +729,6 @@ static ssize_t store_above_hispeed_delay(struct kobject *kobj,
 	return count;
 }
 
-define_one_global_rw(above_hispeed_delay);
-
 static ssize_t show_timer_rate(struct kobject *kobj,
 			struct attribute *attr, char *buf)
 {
@@ -763,9 +747,6 @@ static ssize_t store_timer_rate(struct kobject *kobj,
 	timer_rate = val;
 	return count;
 }
-
-static struct global_attr timer_rate_attr = __ATTR(timer_rate, 0644,
-		show_timer_rate, store_timer_rate);
 
 static ssize_t show_timer_slack(
 	struct kobject *kobj, struct attribute *attr, char *buf)
@@ -787,8 +768,6 @@ static ssize_t store_timer_slack(
 	timer_slack_val = val;
 	return count;
 }
-
-define_one_global_rw(timer_slack);
 
 static ssize_t show_boost(struct kobject *kobj, struct attribute *attr,
 			  char *buf)
@@ -818,8 +797,6 @@ static ssize_t store_boost(struct kobject *kobj, struct attribute *attr,
 	return count;
 }
 
-define_one_global_rw(boost);
-
 static ssize_t store_boostpulse(struct kobject *kobj, struct attribute *attr,
 				const char *buf, size_t count)
 {
@@ -835,9 +812,6 @@ static ssize_t store_boostpulse(struct kobject *kobj, struct attribute *attr,
 	cpufreq_interactive_boost();
 	return count;
 }
-
-static struct global_attr boostpulse =
-	__ATTR(boostpulse, 0200, NULL, store_boostpulse);
 
 static ssize_t show_boostpulse_duration(
 	struct kobject *kobj, struct attribute *attr, char *buf)
@@ -860,19 +834,40 @@ static ssize_t store_boostpulse_duration(
 	return count;
 }
 
-define_one_global_rw(boostpulse_duration);
+#define define_global_rw_attr(_name)		\
+static struct global_attr _name##_attr =	\
+	__ATTR(_name, 0666, show_##_name, store_##_name)
+
+#define define_global_w_attr(_name)		\
+static struct global_attr _name##_attr =	\
+	__ATTR(_name, 0222, NULL, store_##_name)
+
+#define define_global_ro_attr(_name)		\
+static struct global_attr _name##_attr =	\
+	__ATTR(_name, 0444, show_##_name, store_##_name)
+
+define_global_rw_attr(target_loads);
+define_global_rw_attr(hispeed_freq);
+define_global_rw_attr(go_hispeed_load);
+define_global_rw_attr(above_hispeed_delay);
+define_global_rw_attr(min_sample_time);
+define_global_rw_attr(timer_rate);
+define_global_rw_attr(timer_slack);
+define_global_rw_attr(boost);
+define_global_w_attr(boostpulse);
+define_global_rw_attr(boostpulse_duration);
 
 static struct attribute *interactive_attributes[] = {
 	&target_loads_attr.attr,
 	&hispeed_freq_attr.attr,
 	&go_hispeed_load_attr.attr,
-	&above_hispeed_delay.attr,
+	&above_hispeed_delay_attr.attr,
 	&min_sample_time_attr.attr,
 	&timer_rate_attr.attr,
-	&timer_slack.attr,
-	&boost.attr,
-	&boostpulse.attr,
-	&boostpulse_duration.attr,
+	&timer_slack_attr.attr,
+	&boost_attr.attr,
+	&boostpulse_attr.attr,
+	&boostpulse_duration_attr.attr,
 	NULL,
 };
 
