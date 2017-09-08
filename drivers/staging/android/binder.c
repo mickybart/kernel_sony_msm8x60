@@ -1614,7 +1614,7 @@ static void binder_transaction_buffer_release(struct binder_proc *proc,
 				proc->user_buffer_offset;
 
 			fd_buf_size = sizeof(u32) * fda->num_fds;
-			if (fda->num_fds >= SIZE_MAX / sizeof(u32)) {
+			if (fda->num_fds >= ULONG_MAX / sizeof(u32)) {
 				pr_err("transaction release %d invalid number of fds (%lld)\n",
 				       debug_id, (u64)fda->num_fds);
 				continue;
@@ -1813,7 +1813,7 @@ static int binder_translate_fd_array(struct binder_fd_array_object *fda,
 	struct binder_proc *target_proc = t->to_proc;
 
 	fd_buf_size = sizeof(u32) * fda->num_fds;
-	if (fda->num_fds >= SIZE_MAX / sizeof(u32)) {
+	if (fda->num_fds >= ULONG_MAX / sizeof(u32)) {
 		binder_user_error("%d:%d got transaction with invalid number of fds (%lld)\n",
 				  proc->pid, thread->pid, (u64)fda->num_fds);
 		return -EINVAL;
